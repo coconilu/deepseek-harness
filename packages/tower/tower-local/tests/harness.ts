@@ -358,7 +358,7 @@ export async function seedWorkspace(repo: string, base = 'main'): Promise<TowerS
 }
 
 /** Hand-write one mission record into a repo's store. */
-export async function craftMission(repo: string, overrides: Partial<TowerMission> & { id: string }): Promise<TowerMission> {
+export async function craftMission(repo: string, overrides: Omit<Partial<TowerMission>, 'id'> & { id: string }): Promise<TowerMission> {
   const store = new TowerStore(repo)
   const time = new Date().toISOString()
   const mission: TowerMission = {

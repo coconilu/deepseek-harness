@@ -11,6 +11,7 @@ import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { turnBoundaryProjectionDefinition } from '@deepseek-ai/dsh-agent-loop'
 import TowerService, { towerProjectionDefinition, TowerMissionId } from '../src/index.ts'
 import type { Config, TowerUnitState } from '../src/index.ts'
+import type { TowerService as TowerServiceContract } from '../src/types.ts'
 import { StubTowerProvider, stubMission } from './stub-provider.ts'
 
 const TOWER_SECTION = 'Test tower mode instructions.'
@@ -24,7 +25,7 @@ const SIGNAL = new AbortController().signal
  * following `step/start` session event used by the loop.
  */
 async function agentWithSession(
-  ctx: Context,
+  _ctx: Context,
   id = 'agent-1',
   { active, base, cwd }: { active?: boolean; base?: string; cwd?: string } = {},
 ): Promise<Agent & { session: Session }> {
@@ -122,14 +123,17 @@ function closeTurn(session: Session, turn = 0): void {
   session.append('turn/end', { turn, reason: { kind: 'completed' } })
 }
 
+/** One `/tower` mode selection the command handler drives. */
+type TowerModeSelection = { readonly active: true; readonly base: string } | { readonly active: false }
+
 /** Reach the command-only selection entry the `/tower` handler drives. */
 function setMode(
   ctx: Context,
   agent: Agent,
-  selection: { readonly active: true; readonly base: string } | { readonly active: false },
+  selection: TowerModeSelection,
 ): string {
   return (ctx.tower as unknown as {
-    setMode(agent: Agent, selection: typeof selection): string
+    setMode(agent: Agent, selection: TowerModeSelection): string
   }).setMode(agent, selection)
 }
 
@@ -530,7 +534,7 @@ describe('the provider registry', () => {
 })
 
 describe('the caller-authority facade', () => {
-  const leadOnlyOps: [string, (tower: TowerService, agent: Agent) => Promise<unknown>][] = [
+  const leadOnlyOps: [string, (tower: TowerServiceContract, agent: Agent) => Promise<unknown>][] = [
     ['init', (tower, agent) => tower.init(agent)],
     ['spawnMission', (tower, agent) => tower.spawnMission(agent, { title: 't', prompt: 'p', signal: SIGNAL })],
     ['abortMission', (tower, agent) => tower.abortMission(agent, TowerMissionId('m-1'))],
@@ -538,7 +542,7 @@ describe('the caller-authority facade', () => {
     ['merge', (tower, agent) => tower.merge(agent, TowerMissionId('m-1'))],
     ['teardown', (tower, agent) => tower.teardown(agent, { force: false, signal: SIGNAL })],
   ]
-  const participantOps: [string, (tower: TowerService, agent: Agent) => Promise<unknown>][] = [
+  const participantOps: [string, (tower: TowerServiceContract, agent: Agent) => Promise<unknown>][] = [
     ['status', (tower, agent) => tower.status(agent)],
     ['sendMessage', (tower, agent) => tower.sendMessage(agent, { to: 'lead', content: 'hi', signal: SIGNAL })],
     ['inbox', (tower, agent) => tower.inbox(agent, 3)],

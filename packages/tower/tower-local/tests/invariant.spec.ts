@@ -30,9 +30,10 @@ async function setup(): Promise<Context> {
 /** One merge activity notice over `root`, with overrides for the refusal cases. */
 function mergeNotice(
   root: string,
-  overrides: Partial<TowerLocalActivityNotice> & { mission?: TowerMissionId | undefined } = {},
+  overrides: Omit<Partial<TowerLocalActivityNotice>, 'mission' | 'commit'> & { mission?: TowerMissionId | undefined; commit?: string | undefined } = {},
 ): TowerLocalActivityNotice {
-  const { mission, ...rest } = overrides
+  const { mission, commit, ...rest } = overrides
+  const omitted = 'commit' in overrides && commit === undefined
   return {
     root,
     entry: {
@@ -42,7 +43,7 @@ function mergeNotice(
       ...mission !== undefined ? { mission } : {},
       detail: 'merged tower/m-1 into main',
     },
-    commit: 'abc123',
+    ...(omitted ? {} : { commit: commit ?? 'abc123' }),
     ...rest,
   }
 }
