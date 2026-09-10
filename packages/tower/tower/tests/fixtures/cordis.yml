@@ -1,0 +1,8 @@
+- name: '@deepseek-ai/dsh-system-prompt'
+- name: '@deepseek-ai/dsh-session-projection'
+- name: './turn-boundary.ts'
+- name: '@deepseek-ai/dsh-commands'
+- name: '@deepseek-ai/dsh-tower'
+  config:
+    section: 'Test tower policy.'
+- name: './stub-provider.ts'
