@@ -362,9 +362,10 @@ function missionIdParam(): { mission_id: { type: 'string'; required: true; descr
 /**
  * Register the complete tower tool set on `ctx.tools`.
  * @param ctx - plugin context carrying the tower facade and the tool registry.
- * @param config - validated tool config.
+ * @param config - fully materialized tool config: the Loader normalizes the
+ *   schema default, and direct callers must pass a resolved {@link Config}.
  */
-export function apply(ctx: Context, config: Config = { maxInbox: 20 }): void {
+export function apply(ctx: Context, config: Config): void {
   const maxInbox = config.maxInbox
 
   ctx.tools.register(defineTool({

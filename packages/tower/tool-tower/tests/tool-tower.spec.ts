@@ -480,9 +480,8 @@ describe('dsh-tool-tower approval gate', () => {
     forced.answer('allowed-once')
     const forcedResult = await call(forced.ctx, forced.lead, 'tower_teardown', { force: true })
     expect(forcedResult.isError).toBe(false)
-    if (!forcedResult.isError) {
-      expect(forcedResult.value.kept).toEqual([{ id: 'm-2', reason: 'worktree has uncommitted changes' }])
-    }
+    if (forcedResult.isError) throw new Error('expected success')
+    expect(forcedResult.value).toMatchObject({ kept: [{ id: 'm-2', reason: 'worktree has uncommitted changes' }] })
     expect(forced.provider.calls.at(-1)).toBe(`teardown:${String(forced.lead.id)}:true`)
     expect(forced.asks[0]?.reason).toContain('interrupt 1 live mission child(ren) and remove 2 mission worktree(s), including dirty ones')
     expect(forced.asks[0]?.reason).toContain('base "main"')
