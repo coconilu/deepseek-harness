@@ -32,12 +32,13 @@ interface SubagentCapabilities {
   readonly depthLimit: boolean
   readonly toolFilter: boolean
   readonly persona: boolean
+  readonly cwd: boolean
 }
 ```
 
 ## 单次启动请求
 
-工具层根据模型输入和自身配置构建此请求；服务在 `start` 之前针对指定提供方进行校验。必填的 `parent` 提供会话 cwd、谱系与委派深度。可选的 Agent 提供方、模型、推理强度与 token 覆盖、output schema、depth、工具过滤器和 persona 需要对应的能力 flag 匹配。进程内后端会把 `agentOptions` 合并到父 Agent 选项之上，将 filter 和 persona 的作用域限定在子 agent 创建阶段，并通过强制 capture 工具实现所支持的 object-rooted schema。DSH SDK 后端会把四个 Agent 路由字段合并到实例默认值之上，并在子运行时初始化期间校验；ACP、Codex 与 Claude Code 会在启动传输前拒绝 `agentOptions`。
+工具层根据模型输入和自身配置构建此请求；服务在 `start` 之前针对指定提供方进行校验。必填的 `parent` 提供谱系与委派深度，并在 `cwd` 未覆盖时提供会话工作区。可选的 Agent 提供方、模型、推理强度与 token 覆盖、output schema、depth、工具过滤器、persona 与工作目录需要对应的能力 flag 匹配；continuation manager 会为任何可继续提供方落实 `cwd`。进程内后端会把 `agentOptions` 合并到父 Agent 选项之上，将 filter 和 persona 的作用域限定在子 agent 创建阶段，并通过强制 capture 工具实现所支持的 object-rooted schema。DSH SDK 后端会把四个 Agent 路由字段合并到实例默认值之上，并在子运行时初始化期间校验；ACP、Codex 与 Claude Code 会在启动传输前拒绝 `agentOptions`。
 
 ```ts type-equiv
 /**
@@ -53,9 +54,10 @@ interface SubagentStartRequest {
   /** Content delivered as the child's user message. */
   readonly prompt: ContentBlock[]
   /**
-   * The spawning agent. In-process providers derive workspace, lineage, and
-   * delegation depth from its durable session state. ACP reads only its cwd,
-   * and only when no deployment `cwd` override is configured.
+   * The spawning agent. In-process providers derive lineage and delegation
+   * depth from its durable session state, and its workspace unless `cwd`
+   * overrides it. ACP reads only its cwd, and only when no deployment `cwd`
+   * override is configured.
    */
   readonly parent: Agent
   /**
@@ -103,6 +105,16 @@ interface SubagentStartRequest {
    * persona (strict `{{…}}` interpolation against the registered variables).
    */
   readonly persona?: string
+  /**
+   * Optional child working directory: an absolute path to an existing,
+   * enterable directory, validated at start before any child resource exists.
+   * It becomes the child session's durable `cwd` — the workspace its tools
+   * resolve against — instead of inheriting the parent session's. Requires
+   * {@link SubagentCapabilities.cwd} on the one-shot path; the continuation
+   * manager composes every continuable child itself, so it honors `cwd` for
+   * any continuable provider.
+   */
+  readonly cwd?: string
 }
 ```
 

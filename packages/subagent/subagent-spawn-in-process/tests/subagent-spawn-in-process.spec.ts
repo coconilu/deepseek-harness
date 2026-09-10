@@ -1,5 +1,8 @@
 import { createUserMessage, type GenerateOptions } from '@deepseek-ai/dsh-llm'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, onTestFinished } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { Context, symbols, type EffectMeta } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
@@ -271,6 +274,27 @@ describe('dsh-subagent-spawn-in-process', () => {
     await parentHandle.dispose()
   })
 
+  it('runs the child in a caller-supplied working directory instead of the parent\'s', async () => {
+    const { ctx } = await setup([textResponse('x')])
+    const cwd = mkdtempSync(join(tmpdir(), 'dsh-subagent-spawn-cwd-'))
+    onTestFinished(() => { rmSync(cwd, { recursive: true, force: true }) })
+    // A parent WITH a cwd proves the request cwd wins over inheritance.
+    const parentHandle = await ctx.agents.create({
+      sessionId: SessionId('cwd-override-parent-session'),
+      meta: { cwd: '/tmp/parent-workspace' },
+      agentOptions: { provider: 'mock', model: 'mock' },
+    })
+    const run = await start(ctx, 'spawn', {
+      prompt: [{ type: 'text', text: 'p' }],
+      parent: parentHandle.agent,
+      cwd,
+    })
+    await run.result
+    expect(run.localAgent!.session.header.cwd).toBe(cwd)
+    await run.dispose()
+    await parentHandle.dispose()
+  })
+
   it('uses request.agentOptions.model when the parent has no model of its own', async () => {
     const { ctx } = await setup([textResponse('explicit model child')])
     // A parent with NO model (its own turns would need one supplied per-request).
@@ -300,6 +324,7 @@ describe('dsh-subagent-spawn-in-process', () => {
       depthLimit: true,
       toolFilter: true,
       persona: true,
+      cwd: true,
     })
   })
 

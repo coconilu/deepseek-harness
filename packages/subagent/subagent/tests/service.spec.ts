@@ -1,4 +1,7 @@
 import { describe, expect, expectTypeOf, it, onTestFinished, vi } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { type Agent } from '@deepseek-ai/dsh-agent'
 
@@ -25,8 +28,12 @@ function fakeParent(id = 'parent-1'): Agent {
   return { id: SessionId(id) } as unknown as Agent
 }
 
-const ALL_CAPS: SubagentCapabilities = { agentOptions: true, outputSchema: true, depthLimit: true, toolFilter: true, persona: true }
-const NO_CAPS: SubagentCapabilities = { agentOptions: false, outputSchema: false, depthLimit: false, toolFilter: false, persona: false }
+const ALL_CAPS: SubagentCapabilities = {
+  agentOptions: true, outputSchema: true, depthLimit: true, toolFilter: true, persona: true, cwd: true,
+}
+const NO_CAPS: SubagentCapabilities = {
+  agentOptions: false, outputSchema: false, depthLimit: false, toolFilter: false, persona: false, cwd: false,
+}
 
 function baseRequest(overrides: Partial<SubagentStartRequest> = {}): SubagentStartRequest {
   return {
@@ -189,6 +196,7 @@ describe('SubagentRuntime', () => {
     ['depthLimit', { maxDepth: 1 }],
     ['toolFilter', { toolFilter: { deny: ['bash'] } }],
     ['persona', { persona: 'reviewer' }],
+    ['cwd', { cwd: '/workspace/child' }],
   ] as const)('rejects unsupported %s before provider startup', async (_capability, override) => {
     const { subagents } = await service()
     const provider = new StubProvider('weak', NO_CAPS)
@@ -208,6 +216,30 @@ describe('SubagentRuntime', () => {
       .rejects.toThrow()
     expect(provider.startCount).toBe(0)
     expect(() => { assertSubagentMaxDepth(undefined) }).not.toThrow()
+  })
+
+  it('validates the request cwd before provider startup', async () => {
+    const { subagents } = await service()
+    const provider = new StubProvider('strong')
+    subagents.registerProvider(provider)
+    const root = mkdtempSync(join(tmpdir(), 'dsh-subagent-service-cwd-'))
+    onTestFinished(() => { rmSync(root, { recursive: true, force: true }) })
+    await expect(subagents.start('strong', baseRequest({ cwd: join('relative', 'dir') })))
+      .rejects.toThrow(/must be an absolute path/)
+    await expect(subagents.start('strong', baseRequest({ cwd: join(root, 'missing') })))
+      .rejects.toThrow(/not an accessible directory/)
+    expect(provider.startCount).toBe(0)
+  })
+
+  it('passes a usable request cwd to the provider verbatim', async () => {
+    const { subagents } = await service()
+    const provider = new StubProvider('strong')
+    subagents.registerProvider(provider)
+    const cwd = mkdtempSync(join(tmpdir(), 'dsh-subagent-service-cwd-'))
+    onTestFinished(() => { rmSync(cwd, { recursive: true, force: true }) })
+    const run = await subagents.start('strong', baseRequest({ cwd }))
+    await run.result
+    expect(provider.lastRequest?.cwd).toBe(cwd)
   })
 
   it('publishes lifecycle only after async provider start and keeps parent scope', async () => {

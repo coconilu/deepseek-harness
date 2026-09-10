@@ -311,7 +311,7 @@ describe('SubagentRuntime.startContinuable', () => {
     const start = vi.fn(async () => { throw new Error('must not dispatch') })
     ctx.subagents.registerProvider({
       name: 'one-shot',
-      capabilities: { agentOptions: false, outputSchema: false, depthLimit: false, toolFilter: false, persona: false },
+      capabilities: { agentOptions: false, outputSchema: false, depthLimit: false, toolFilter: false, persona: false, cwd: false },
       inheritsParentContext: false,
       start,
     })
@@ -516,6 +516,46 @@ describe('SubagentRuntime.startContinuable', () => {
       request: { prompt: message('deep'), parent, maxDepth: Number.NaN },
     })).rejects.toThrow(/non-negative safe integer/)
     expect(ctx.agents.list().map(agent => agent.id)).toEqual([SessionId('parent')])
+  })
+
+  it('rejects a relative request cwd before reserving the child id', async () => {
+    const { ctx, parent } = await setup([])
+    await expect(ctx.subagents.startContinuable({
+      ...startSpec(parent),
+      request: { prompt: message('child task'), parent, cwd: join('relative', 'dir') },
+    })).rejects.toThrow(/must be an absolute path/)
+    // A rejected cwd provisions nothing: no live child, no durable child.
+    expect(ctx.agents.list().map(agent => agent.id)).toEqual([SessionId('parent')])
+    await expect(ctx.subagents.listChildren(parent.id)).resolves.toEqual([])
+  })
+
+  it('threads a caller-supplied cwd into the durable child session header', async () => {
+    const { ctx, parent } = await setup([textResponse('answer')])
+    const cwd = mkdtempSync(join(tmpdir(), 'dsh-subagent-continuation-cwd-'))
+    cleanups.push(async () => { rmSync(cwd, { recursive: true, force: true }) })
+    const started = await ctx.subagents.startContinuable({
+      ...startSpec(parent),
+      request: { prompt: message('child task'), parent, cwd },
+    })
+    await waitNoActivation(ctx, started.childId)
+    const loaded = await loadStoredSession(ctx.sessionPersistence, started.childId)
+    expect(loaded.meta.cwd).toBe(cwd)
+  })
+
+  it('inherits the parent session cwd when the request omits one', async () => {
+    const { ctx } = await setup([textResponse('answer')])
+    const cwd = mkdtempSync(join(tmpdir(), 'dsh-subagent-continuation-parent-cwd-'))
+    cleanups.push(async () => { rmSync(cwd, { recursive: true, force: true }) })
+    const parentHandle = await ctx.agents.create({
+      sessionId: SessionId('cwd-parent'),
+      meta: { cwd },
+      agentOptions: { provider: 'mock', model: 'mock' },
+    })
+    const started = await ctx.subagents.startContinuable(startSpec(parentHandle.agent))
+    await waitNoActivation(ctx, started.childId)
+    const loaded = await loadStoredSession(ctx.sessionPersistence, started.childId)
+    expect(loaded.meta.cwd).toBe(cwd)
+    await parentHandle.dispose()
   })
 
   it('omits undeclared composition fields from the descriptor', async () => {
@@ -846,7 +886,7 @@ describe('direct-child Queue residency routing', () => {
     await ctx.plugin(SubagentInvariant)
     const disposeProvider = ctx.subagents.registerProvider({
       name: 'retired',
-      capabilities: { agentOptions: false, outputSchema: false, depthLimit: false, toolFilter: false, persona: false },
+      capabilities: { agentOptions: false, outputSchema: false, depthLimit: false, toolFilter: false, persona: false, cwd: false },
       inheritsParentContext: false,
       start: async () => { throw new Error('one-shot start is not used') },
       prepareContinuable: () => Promise.resolve({}),

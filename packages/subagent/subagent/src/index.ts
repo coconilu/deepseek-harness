@@ -66,6 +66,7 @@ import type {
 } from './types.ts'
 import { SubagentError } from './error.ts'
 import { assertSubagentMaxDepth } from './depth.ts'
+import { assertUsableCwd } from './out-of-process.ts'
 import { createActivationObserver, createLifecycleEmitter, observeRun } from './lifecycle.ts'
 import type { ActivationObserver, LifecycleEmitter } from './lifecycle.ts'
 import SubagentContinuationManager from './continuation.ts'
@@ -558,6 +559,7 @@ export class SubagentRuntime extends TypertRemoteService {
     this.assertCapabilities(provider, request)
     assertSubagentMaxDepth(request.maxDepth)
     if (request.outputSchema !== undefined) assertObjectJsonSchema(request.outputSchema)
+    if (request.cwd !== undefined) assertUsableCwd('subagent', 'request cwd', request.cwd)
     const descriptor = snapshotSubagentDescriptor({
       mode: 'one-shot',
       provider: name,
@@ -645,6 +647,7 @@ export class SubagentRuntime extends TypertRemoteService {
       { when: request.maxDepth !== undefined, cap: 'depthLimit' },
       { when: request.toolFilter !== undefined, cap: 'toolFilter' },
       { when: request.persona !== undefined, cap: 'persona' },
+      { when: request.cwd !== undefined, cap: 'cwd' },
     ]
     for (const { when, cap } of needs) {
       if (when && !provider.capabilities[cap]) {

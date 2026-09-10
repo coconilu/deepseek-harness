@@ -41,6 +41,7 @@ import { assertSubagentMaxDepth } from './depth.ts'
 import { foldSubagentDescriptor, snapshotSubagentDescriptor } from './descriptor.ts'
 import { establishCatalogChild } from './catalog.ts'
 import { SubagentError } from './error.ts'
+import { assertUsableCwd } from './out-of-process.ts'
 import { isAdjacentAgentSendMessageTool } from './internal.ts'
 import type { ActivationObserver } from './lifecycle.ts'
 import type {
@@ -105,6 +106,8 @@ export class SubagentContinuationManager {
     this.activations.assertAdmitting(parent)
     const persistence = this.requirePersistence()
     assertSubagentMaxDepth(request.maxDepth)
+    // Validate before the child id is reserved: a rejected cwd provisions nothing.
+    if (request.cwd !== undefined) assertUsableCwd('subagent', 'request cwd', request.cwd)
     const childId = spec.childId ?? brandString<SessionId>(randomUUID())
     this.activations.assertChildIdAvailable(childId)
     const childDepth = resolveChildDepth(parent, request.maxDepth)
@@ -162,7 +165,7 @@ export class SubagentContinuationManager {
           parent,
           create: {
             seed,
-            meta: childSessionMeta(parent, childDepth, prepared.seed !== undefined),
+            meta: childSessionMeta(parent, childDepth, prepared.seed !== undefined, request.cwd),
             inheritedEventCount,
             delegatedPolicies,
             descriptor,

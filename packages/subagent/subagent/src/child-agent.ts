@@ -119,10 +119,11 @@ export function resolveChildAgentOptions(
 }
 
 /**
- * Build the child session's durable creation metadata: the parent's workspace,
- * its direct lineage, coarse product origin, the recursion budget that must
- * survive persistence, the seed boundary that separates inherited parent
- * history from child work, and the composition the child runs under.
+ * Build the child session's durable creation metadata: the requested workspace
+ * (falling back to the parent's), its direct lineage, coarse product origin,
+ * the recursion budget that must survive persistence, the seed boundary that
+ * separates inherited parent history from child work, and the composition the
+ * child runs under.
  *
  * The preset is read from the parent's LIVE scope chain rather than from its
  * header, because a parent that switched preset while blank runs on the newer
@@ -133,17 +134,20 @@ export function resolveChildAgentOptions(
  * @param parent - the delegating parent agent.
  * @param childDepth - the resolved delegation depth to persist.
  * @param isSeeded - whether this child inherits a parent-log prefix, including an explicitly empty one.
+ * @param cwd - the start-validated per-child workspace, or `undefined` to inherit the parent's.
  * @returns the `meta` for `ctx.agents.create()`.
  */
 export function childSessionMeta(
   parent: Agent,
   childDepth: number,
   isSeeded: boolean,
+  cwd?: string,
 ): NonNullable<CreateAgentOptions['meta']> {
   const parentHeader = parent.session.header
   const agentPreset = parent.ctx.get('agentPresets')?.composedPreset(parent.ctx)
+  const resolvedCwd = cwd ?? parentHeader.cwd
   return {
-    ...parentHeader.cwd !== undefined ? { cwd: parentHeader.cwd } : {},
+    ...resolvedCwd !== undefined ? { cwd: resolvedCwd } : {},
     ...agentPreset === undefined ? {} : { agentPreset },
     parentSession: parentHeader.id,
     isSeeded,

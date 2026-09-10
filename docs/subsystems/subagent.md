@@ -32,12 +32,13 @@ interface SubagentCapabilities {
   readonly depthLimit: boolean
   readonly toolFilter: boolean
   readonly persona: boolean
+  readonly cwd: boolean
 }
 ```
 
 ## The one-shot start request
 
-The tool layer builds this request from the model input and its own config; the service validates it against the named provider before `start`. Required `parent` supplies the session cwd, lineage, and delegation depth. Optional Agent provider, model, reasoning-effort, and token overrides, output schema, depth, tool filter, and persona require matching capability flags. In-process backends merge `agentOptions` over the parent Agent's options, scope filters and personas to child creation, and implement the supported object-rooted schema with a forced capture tool. The DSH SDK backend merges the four Agent route fields over its instance defaults and validates them in the child runtime's initialization; ACP, Codex, and Claude Code reject `agentOptions` before starting their transports.
+The tool layer builds this request from the model input and its own config; the service validates it against the named provider before `start`. Required `parent` supplies lineage and delegation depth and, unless `cwd` overrides it, the session workspace. Optional Agent provider, model, reasoning-effort, and token overrides, output schema, depth, tool filter, persona, and working directory require matching capability flags; the continuation manager honors `cwd` for every continuable provider. In-process backends merge `agentOptions` over the parent Agent's options, scope filters and personas to child creation, and implement the supported object-rooted schema with a forced capture tool. The DSH SDK backend merges the four Agent route fields over its instance defaults and validates them in the child runtime's initialization; ACP, Codex, and Claude Code reject `agentOptions` before starting their transports.
 
 ```ts type-equiv
 /**
@@ -53,9 +54,10 @@ interface SubagentStartRequest {
   /** Content delivered as the child's user message. */
   readonly prompt: ContentBlock[]
   /**
-   * The spawning agent. In-process providers derive workspace, lineage, and
-   * delegation depth from its durable session state. ACP reads only its cwd,
-   * and only when no deployment `cwd` override is configured.
+   * The spawning agent. In-process providers derive lineage and delegation
+   * depth from its durable session state, and its workspace unless `cwd`
+   * overrides it. ACP reads only its cwd, and only when no deployment `cwd`
+   * override is configured.
    */
   readonly parent: Agent
   /**
@@ -103,6 +105,16 @@ interface SubagentStartRequest {
    * persona (strict `{{…}}` interpolation against the registered variables).
    */
   readonly persona?: string
+  /**
+   * Optional child working directory: an absolute path to an existing,
+   * enterable directory, validated at start before any child resource exists.
+   * It becomes the child session's durable `cwd` — the workspace its tools
+   * resolve against — instead of inheriting the parent session's. Requires
+   * {@link SubagentCapabilities.cwd} on the one-shot path; the continuation
+   * manager composes every continuable child itself, so it honors `cwd` for
+   * any continuable provider.
+   */
+  readonly cwd?: string
 }
 ```
 
