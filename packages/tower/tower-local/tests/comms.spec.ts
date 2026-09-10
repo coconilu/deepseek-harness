@@ -13,6 +13,7 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 import type { TowerMessage } from '@deepseek-ai/dsh-tower/types'
 import { TOWER_ACTIVITY_EVENT } from '../src/events.ts'
 import type { TowerLocalActivityNotice } from '../src/events.ts'
+import { Config } from '../src/index.ts'
 import { TowerStore } from '../src/store.ts'
 import { textResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
 import {
@@ -368,6 +369,20 @@ describe('dashboard bounds and config', () => {
   it('rejects invalid plugin config at load', async () => {
     const repo = makeGitRepo()
     await expect(boot({ repo, towerLocalConfig: ['    activityTail: -1'] })).rejects.toThrow()
+  }, 60_000)
+
+  it('materializes the child tool filter default and validates deny names', () => {
+    expect(Config.parse({})).toEqual({ childProvider: 'spawn', childToolFilter: [], activityTail: 50 })
+    expect(Config.parse({ childToolFilter: ['tower_spawn', 'tower_review'] }))
+      .toMatchObject({ childProvider: 'spawn', childToolFilter: ['tower_spawn', 'tower_review'], activityTail: 50 })
+    expect(() => Config.parse({ childToolFilter: ['ok', ''] })).toThrow()
+    expect(() => Config.parse({ childToolFilter: ['ok', 7] })).toThrow()
+    expect(() => Config.parse({ childToolFilter: 'tower_spawn' })).toThrow()
+  })
+
+  it('rejects an invalid child tool filter at plugin load', async () => {
+    const repo = makeGitRepo()
+    await expect(boot({ repo, towerLocalConfig: ['    childToolFilter:', '      - ""'] })).rejects.toThrow()
   }, 60_000)
 })
 

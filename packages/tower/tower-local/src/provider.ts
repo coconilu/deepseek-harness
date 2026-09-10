@@ -58,6 +58,11 @@ type DeliveryContent = Parameters<Context['subagents']['sendMessage']>[2]
 export interface LocalTowerConfig {
   /** `ctx.subagents` provider name composing mission children. */
   readonly childProvider: string
+  /**
+   * Tool names denied from every mission child's tool set; empty denies
+   * nothing. An unknown or reserved name fails the child's start loudly.
+   */
+  readonly childToolFilter: readonly string[]
   /** Maximum activity entries one `status` dashboard returns. */
   readonly activityTail: number
 }
@@ -245,6 +250,7 @@ export class LocalTowerProvider implements TowerProvider {
           prompt: [{ type: 'text', text: request.prompt }],
           parent: caller,
           cwd: mission.worktree,
+          ...this.config.childToolFilter.length > 0 ? { toolFilter: { deny: this.config.childToolFilter } } : {},
         },
         signal: request.signal,
       })

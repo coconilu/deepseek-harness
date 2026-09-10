@@ -22,6 +22,11 @@ export const inject = ['tower', 'subagents', 'subprocess']
 export interface Config {
   /** `ctx.subagents` provider name composing mission children (default `spawn`). */
   childProvider: string
+  /**
+   * Tool names denied from every mission child's tool set (default none). An
+   * unknown or reserved name fails the mission child's start loudly.
+   */
+  childToolFilter: readonly string[]
   /** Maximum activity entries one `status` dashboard returns (default 50). */
   activityTail: number
 }
@@ -31,6 +36,7 @@ export interface Config {
 // while the interface reads them as materialized values.
 export const Config = z.strictObject({
   childProvider: z.string().min(1).default('spawn'),
+  childToolFilter: z.array(z.string().min(1)).default([]),
   activityTail: z.number().int().positive().default(50),
 }) as unknown as z.ZodType<Config>
 

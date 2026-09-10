@@ -113,12 +113,12 @@ describe('workspace init', () => {
   it('refuses init without active tower mode or a recorded base', async () => {
     const repo = makeGitRepo()
     const inactive = await minimalContext({ active: false, base: null })
-    const inactiveProvider = new LocalTowerProvider(inactive, { childProvider: 'spawn', activityTail: 50 })
+    const inactiveProvider = new LocalTowerProvider(inactive, { childProvider: 'spawn', childToolFilter: [], activityTail: 50 })
     await expect(inactiveProvider.init(looseAgent(inactive, 'lead', { cwd: repo })))
       .rejects.toThrow(/tower mode is not active/)
 
     const baseless = await minimalContext({ active: true, base: null })
-    const baselessProvider = new LocalTowerProvider(baseless, { childProvider: 'spawn', activityTail: 50 })
+    const baselessProvider = new LocalTowerProvider(baseless, { childProvider: 'spawn', childToolFilter: [], activityTail: 50 })
     await expect(baselessProvider.init(looseAgent(baseless, 'lead', { cwd: repo })))
       .rejects.toThrow(/tower mode is not active/)
   }, 60_000)
@@ -126,7 +126,7 @@ describe('workspace init', () => {
   it('refuses init and operations without a session cwd', async () => {
     const repo = makeGitRepo()
     const ctx = await minimalContext()
-    const provider = new LocalTowerProvider(ctx, { childProvider: 'spawn', activityTail: 50 })
+    const provider = new LocalTowerProvider(ctx, { childProvider: 'spawn', childToolFilter: [], activityTail: 50 })
     await expect(provider.init(looseAgent(ctx, 'cwdfree'))).rejects.toThrow(/no working directory/)
     await seedWorkspace(repo)
     await expect(provider.status(looseAgent(ctx, 'cwdfree-2'))).rejects.toThrow(/no working directory/)
@@ -213,7 +213,7 @@ describe('validateBase', () => {
   it('accepts a local branch and rejects tags, remote refs, and non-repositories', async () => {
     const repo = makeGitRepo()
     const ctx = await minimalContext()
-    const provider = new LocalTowerProvider(ctx, { childProvider: 'spawn', activityTail: 50 })
+    const provider = new LocalTowerProvider(ctx, { childProvider: 'spawn', childToolFilter: [], activityTail: 50 })
     await expect(provider.validateBase(repo, 'main')).resolves.toBeUndefined()
     gitSync(repo, 'tag', 'v1')
     await expect(provider.validateBase(repo, 'v1')).rejects.toThrow(/not a local branch/)
