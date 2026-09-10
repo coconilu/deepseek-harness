@@ -28,6 +28,7 @@ kind: "package-group"
 | [`headless`](headless/README.zh.md) | 基于 base 的一次性命令行任务应用 | `headless-runner` |
 | [`sdk-app`](sdk-app/README.zh.md) | 基于 base 的 SDK JSON-RPC stdio 应用 | 挂载 SDK 服务器 |
 | [`sdk-minimal`](sdk-minimal/README.zh.md) | 不使用 base 或 Web 的独立极简 SDK 应用 | —（完整 patch 树） |
+| [`tower`](tower/README.zh.md) | 基于 base 的 tower mission：worktree 隔离与评审门禁合并，按 profile 显式启用 | `/tower` + 十个 `tower_*` 工具 |
 
 内置组合包从 dsh 安装目录解析；树外（out-of-tree）组合包通过 `dsh plugin --profile <name> add <package>` 安装进 profile。
 
