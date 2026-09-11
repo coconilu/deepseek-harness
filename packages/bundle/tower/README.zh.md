@@ -42,7 +42,7 @@ profile 必须已包含 `@deepseek-ai/dsh-base`：本层叠加在其后，消费
 
 tower 模式下，lead 先用 `tower_init` 创建或接管工作区，用 `tower_spawn` 分派 mission（每个 mission 在自己从 base 分出的 worktree 中由子代理执行），用 `tower_status` 观察进度，用 `tower_send` 与 `tower_inbox` 交换消息，用 `tower_finding` 记录共享发现，用 `tower_review` 记录评审轮次，并用 `tower_merge` 合并通过评审的 mission。`tower_mission` 中止一个 mission；`tower_teardown` 结束工作区的当前工作。`tower_merge` 与 `tower_teardown` 在行动前先征求用户批准。
 
-出厂边界：每个工作区最多八个未合并 mission（`maxMissions: 8`），mission 子代理经由 `spawn` provider 组合，策略文本由本包作为 Service Definition 的 `section` 提供。
+出厂边界：每个工作区最多八个未合并 mission（`maxMissions: 8`），mission 子代理经由 `spawn` provider 组合且经 `childToolFilter` 被 deny 六个仅 lead 可用的 tower_* 工具，策略文本由本包作为 Service Definition 的 `section` 提供。
 
 -----
 
@@ -52,7 +52,7 @@ tower 模式下，lead 先用 `tower_init` 创建或接管工作区，用 `tower
 <details>
 <summary>实现细节——点击展开</summary>
 
-本包的运行时内容是 [`cordis.patch.yml`](cordis.patch.yml)：一段在 `dsh-base` 之后应用的、含三行的 insert patch。Service Definition 行逐字设定策略 `section`、`provider: local` 与 `maxMissions: 8`；provider 行设定 `childProvider: spawn`；工具消费方行不带 config，保持工具默认的收件箱上限。包测试钉住 patch 各行并通过真实 Loader 启动，在组合出的树上断言 /tower 命令、十个 tower_* 工具与逐字一致的策略段落。
+本包的运行时内容是 [`cordis.patch.yml`](cordis.patch.yml)：一段在 `dsh-base` 之后应用的、含三行的 insert patch。Service Definition 行逐字设定策略 `section`、`provider: local` 与 `maxMissions: 8`；provider 行设定 `childProvider: spawn`，并经 `childToolFilter` 在 mission 子代理中 deny 六个仅 lead 可用的 tower_* 工具；工具消费方行不带 config，保持工具默认的收件箱上限。包测试钉住 patch 各行并通过真实 Loader 启动，在组合出的树上断言 /tower 命令、十个 tower_* 工具与逐字一致的策略段落。
 
 | 文件 | 职责 |
 |---|---|

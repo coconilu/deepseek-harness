@@ -42,7 +42,7 @@ The layer adds three composition rows after `dsh-base`: the tower Service Defini
 
 In tower mode the lead calls `tower_init` once to create or adopt the workspace, spawns missions with `tower_spawn` (each in its own worktree branched from the base, driven by a child agent), monitors through `tower_status`, exchanges messages through `tower_send` and `tower_inbox`, records shared discoveries with `tower_finding`, records review rounds with `tower_review`, and lands approved missions with `tower_merge`. `tower_mission` aborts one mission; `tower_teardown` ends the workspace's active work. `tower_merge` and `tower_teardown` ask the user for approval before acting.
 
-The shipped bounds: eight unmerged missions per workspace (`maxMissions: 8`), mission children composed through the `spawn` provider, and the policy text shipped by this bundle as the Service Definition's `section`.
+The shipped bounds: eight unmerged missions per workspace (`maxMissions: 8`), mission children composed through the `spawn` provider with the six lead-only tower_* tools denied (`childToolFilter`), and the policy text shipped by this bundle as the Service Definition's `section`.
 
 -----
 
@@ -52,7 +52,7 @@ The shipped bounds: eight unmerged missions per workspace (`maxMissions: 8`), mi
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The package's runtime content is [`cordis.patch.yml`](cordis.patch.yml): one insert patch of three rows applied after `dsh-base`. The Service Definition row sets the policy `section` verbatim, `provider: local`, and `maxMissions: 8`; the provider row sets `childProvider: spawn`; the tool consumer row carries no config and keeps the tool default inbox bound. The package test pins the patch rows and boots them through the real Loader, asserting the /tower command, the ten tower_* tools, and the verbatim policy section on the composed tree.
+The package's runtime content is [`cordis.patch.yml`](cordis.patch.yml): one insert patch of three rows applied after `dsh-base`. The Service Definition row sets the policy `section` verbatim, `provider: local`, and `maxMissions: 8`; the provider row sets `childProvider: spawn` and denies the six lead-only tower_* tools in mission children through `childToolFilter`; the tool consumer row carries no config and keeps the tool default inbox bound. The package test pins the patch rows and boots them through the real Loader, asserting the /tower command, the ten tower_* tools, and the verbatim policy section on the composed tree.
 
 | File | Role |
 |---|---|
