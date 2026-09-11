@@ -263,6 +263,37 @@ describe('built-in conversation node Definitions', () => {
     expect(chatViewDefinition.isActive?.(current)).toBe(false)
   })
 
+  it('counts a settled command carrying a visible result as shell activity', () => {
+    const error = assembler([
+      at(1, 'command/run', { commandId: 'command-1', name: 'tower', source: { kind: 'user' } }),
+      at(2, 'command/done', {
+        commandId: 'command-1',
+        kind: 'error',
+        text: 'Usage: /tower on <base> | /tower off | /tower status.',
+      }),
+    ])
+    expect(chatViewDefinition.isActive?.(snapshot(error))).toBe(true)
+
+    const success = assembler([
+      at(1, 'command/run', { commandId: 'command-2', name: 'feedback', source: { kind: 'user' } }),
+      at(2, 'command/done', { commandId: 'command-2', kind: 'success', text: 'Feedback recorded.' }),
+    ])
+    expect(chatViewDefinition.isActive?.(snapshot(success))).toBe(true)
+
+    // A bare lifecycle settlement carries nothing to read: the shell keeps the hero.
+    const bare = assembler([
+      at(1, 'command/run', { commandId: 'command-3', name: 'plan', source: { kind: 'user' } }),
+      at(2, 'command/done', { commandId: 'command-3', kind: 'success' }),
+    ])
+    expect(chatViewDefinition.isActive?.(snapshot(bare))).toBe(false)
+
+    // Still executing: nothing settled yet.
+    const running = assembler([
+      at(1, 'command/run', { commandId: 'command-4', name: 'plan', source: { kind: 'user' } }),
+    ])
+    expect(chatViewDefinition.isActive?.(snapshot(running))).toBe(false)
+  })
+
   it('keeps the Turn rail projection current when a chunk updates one node in place', () => {
     const value = assembler([
       at(1, 'turn/start', { turn: 1 }),
