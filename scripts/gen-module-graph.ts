@@ -32,6 +32,7 @@ const GROUP_ORDER = [
   'timeout',
   'todo',
   'plan',
+  'tower',
   'cordis',
   'hooks',
   'session-persistence',

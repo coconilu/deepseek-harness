@@ -39,6 +39,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@deepseek-ai/dsh-tool-jobs` | `job_kill`, `job_list`, `job_output` | `ctx.tools`, `ctx.jobs`, `ctx.systemPrompt` | `tool/call`, `tool/result`, `user/message via agent.inject() for background completion notices` | - | The kind-agnostic background-job controller: background bash commands, PTY sends, and subagents are read, listed, and killed through the same three tools. Loading the plugin attaches the controller that arms producers' `ctx.jobs.start()`. |
 | `@deepseek-ai/dsh-experimental-tool-agent-team` | `interrupt_agent`, `list_agents`, `send_message`, `spawn_teammate`, `team_task_create`, `team_task_get`, `team_task_list`, `team_task_update`, `wait_agent` | `ctx.tools`, `ctx.systemPrompt`, `ctx.agentTeams`, `an exact live Team member Agent` | `tool/call`, `team/member`, `team/message/queued`, `team/message/delivered`, `team/task`, `tool/result` | - | All nine tools are scoped to implicit Team Leads and durable teammates. The shipped dsh-base bundle keeps the package disabled; the documented Agent Teams profile patch enables it while disabling the legacy continuable-child control names. |
 | `@deepseek-ai/dsh-tool-todo` | `todo_write` | `ctx.tools`, `owning Agent session` | `tool/call`, `todo/write`, `tool/result` | - | todo_write is session-owned state; UIs render the latest todo/write event as a checklist. `allowParallelInProgress` is required with no default, so the catalog states its choice: `true`, whose description invites several `in_progress` items. A deployment choosing `false` receives the same tool with a description asking for exactly one active task. |
+| `@deepseek-ai/dsh-tool-tower` | `tower_finding`, `tower_inbox`, `tower_init`, `tower_merge`, `tower_mission`, `tower_review`, `tower_send`, `tower_spawn`, `tower_status`, `tower_teardown` | `ctx.tools`, `ctx.tower`, `ctx.systemPrompt`, `ctx.approval at execution time for tower_merge/tower_teardown (optional, fails closed)` | `tool/call`, `tool/result`, `tower workspace journals through ctx.tower (missions, messages, findings, reviews, activity)` | - | Lead-only tools refuse without active tower mode on the calling session; the comms set (tower_status, tower_send, tower_inbox, tower_finding) also admits the recorded owner of an unmerged mission. tower_merge and tower_teardown additionally ask the approval seam before delegating (its absence fails closed). Mission children compose MISSION_TOOL_FILTER from this package so the lead-only names never reach their model. |
 | `@deepseek-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`, `ctx.workflowEngine`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents the script children)` | `tool/call`, `tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-web` | `web_fetch`, `web_search` | `ctx.tools`, `ctx.web`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | web_search and web_fetch keep provider selection behind ctx.web so model-visible schemas stay stable across backend swaps. |
 
@@ -2121,6 +2122,244 @@ Record and update a structured task list for the current work. Send the ENTIRE l
 Source: [`packages/todo/tool-todo/src/index.ts`](../packages/todo/tool-todo/src/index.ts)
 
 todo_write is session-owned state; UIs render the latest todo/write event as a checklist. `allowParallelInProgress` is required with no default, so the catalog states its choice: `true`, whose description invites several `in_progress` items. A deployment choosing `false` receives the same tool with a description asking for exactly one active task.
+
+<a id="deepseek-aidsh-tool-tower"></a>
+
+## `@deepseek-ai/dsh-tool-tower`
+
+### `tower_finding`
+
+Record one shared finding every tower participant can read, or list the findings recorded so far. Open to the lead and mission sessions. Record a finding whenever you learn something the other participants need — a blocker, a discovered contract, a shared decision.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "action": {
+      "type": "string",
+      "description": "record stores a new finding; list returns every finding.",
+      "enum": [
+        "record",
+        "list"
+      ]
+    },
+    "title": {
+      "type": "string",
+      "description": "Short finding title. Required for record."
+    },
+    "body": {
+      "type": "string",
+      "description": "The complete finding detail. Required for record."
+    }
+  },
+  "required": [
+    "action"
+  ]
+}
+```
+
+Source: [`packages/tower/tool-tower/src/index.ts`](../packages/tower/tool-tower/src/index.ts)
+
+### `tower_inbox`
+
+Read the messages addressed to this session ("all" broadcasts included), newest last. Open to the lead and mission sessions. The result is bounded when `limit` is omitted.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "limit": {
+      "type": "integer",
+      "description": "Maximum messages to read, taken from the newest. Defaults to the deployment bound."
+    }
+  }
+}
+```
+
+Source: [`packages/tower/tool-tower/src/index.ts`](../packages/tower/tool-tower/src/index.ts)
+
+### `tower_init`
+
+Create (or adopt) this workspace's tower at the calling session's git root: it records the base branch and the .tower/ coordination store. Call once after entering tower mode; re-running adopts any existing workspace and reports how many unmerged missions carried over. Lead-only.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/tower/tool-tower/src/index.ts`](../packages/tower/tool-tower/src/index.ts)
+
+### `tower_merge`
+
+Merge one APPROVED mission branch back into the recorded base (a merge commit lands on the base and the mission worktree is removed). Lead-only; asks the user for approval before merging. The mission must be approved with an approving latest round whose commit still equals its branch tip.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "mission_id": {
+      "type": "string",
+      "description": "The mission id, like m-3."
+    }
+  },
+  "required": [
+    "mission_id"
+  ]
+}
+```
+
+Source: [`packages/tower/tool-tower/src/index.ts`](../packages/tower/tool-tower/src/index.ts)
+
+### `tower_mission`
+
+Control one mission. Lead-only. action "abort" interrupts the mission's live child (its inbox survives) and marks the mission aborted; the branch and worktree stay for inspection.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "mission_id": {
+      "type": "string",
+      "description": "The mission id, like m-3."
+    },
+    "action": {
+      "type": "string",
+      "description": "The control operation to apply.",
+      "enum": [
+        "abort"
+      ]
+    }
+  },
+  "required": [
+    "mission_id",
+    "action"
+  ]
+}
+```
+
+Source: [`packages/tower/tool-tower/src/index.ts`](../packages/tower/tool-tower/src/index.ts)
+
+### `tower_review`
+
+Record one review round on a mission branch, stamping its current tip commit. Lead-only. verdict "approve" marks the mission approved (only approved missions can merge); "reject" returns it to active for rework.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "mission_id": {
+      "type": "string",
+      "description": "The mission id, like m-3."
+    },
+    "verdict": {
+      "type": "string",
+      "description": "The review verdict.",
+      "enum": [
+        "approve",
+        "reject"
+      ]
+    },
+    "summary": {
+      "type": "string",
+      "description": "Review summary: what was examined and why the verdict holds."
+    }
+  },
+  "required": [
+    "mission_id",
+    "verdict",
+    "summary"
+  ]
+}
+```
+
+Source: [`packages/tower/tool-tower/src/index.ts`](../packages/tower/tool-tower/src/index.ts)
+
+### `tower_send`
+
+Send one message through the tower: `to` is "lead", one mission id, or "all" (every live mission except the sender). Open to the lead and mission sessions. The lead cannot address a message to itself.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "to": {
+      "type": "string",
+      "description": "\"lead\", one mission id, or \"all\"."
+    },
+    "content": {
+      "type": "string",
+      "description": "Self-contained message text for the receiver."
+    }
+  },
+  "required": [
+    "to",
+    "content"
+  ]
+}
+```
+
+Source: [`packages/tower/tool-tower/src/index.ts`](../packages/tower/tool-tower/src/index.ts)
+
+### `tower_spawn`
+
+Create one mission: fork the recorded base branch into an isolated git worktree and start a mission child there. Lead-only. The child sees only `prompt` plus later tower messages — put the complete task, context, constraints, and definition of done in it.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Short mission title for dashboards and activity entries."
+    },
+    "prompt": {
+      "type": "string",
+      "description": "The COMPLETE task text the mission child receives."
+    }
+  },
+  "required": [
+    "title",
+    "prompt"
+  ]
+}
+```
+
+Source: [`packages/tower/tool-tower/src/index.ts`](../packages/tower/tool-tower/src/index.ts)
+
+### `tower_status`
+
+Read the tower dashboard: every unmerged mission with its status, owner liveness, and review-gate state, plus the findings count and the recent activity tail. Use it before deciding spawns, reviews, merges, or teardown. Open to the lead and to mission sessions.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/tower/tool-tower/src/index.ts`](../packages/tower/tool-tower/src/index.ts)
+
+### `tower_teardown`
+
+End the workspace's active tower work: interrupt live mission children, remove mission worktrees (dirty ones are kept and reported unless force), and leave the .tower/ records in place as the audit trail. Lead-only; asks the user for approval first. Tower mode itself stays on.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "force": {
+      "type": "boolean",
+      "description": "Remove dirty worktrees too. Defaults to false (dirty worktrees are kept and reported)."
+    }
+  }
+}
+```
+
+Source: [`packages/tower/tool-tower/src/index.ts`](../packages/tower/tool-tower/src/index.ts)
+
+Lead-only tools refuse without active tower mode on the calling session; the comms set (tower_status, tower_send, tower_inbox, tower_finding) also admits the recorded owner of an unmerged mission. tower_merge and tower_teardown additionally ask the approval seam before delegating (its absence fails closed). Mission children compose MISSION_TOOL_FILTER from this package so the lead-only names never reach their model.
 
 <a id="deepseek-aidsh-tool-workflow"></a>
 

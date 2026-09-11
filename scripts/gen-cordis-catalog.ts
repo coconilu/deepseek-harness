@@ -110,6 +110,7 @@ export const SERVICE_PAGE: Record<string, string> = {
   subagents: 'subagent.md',
   subprocess: 'subprocess.md',
   systemPrompt: 'system-prompt.md',
+  tower: 'tower.md',
   jobs: 'jobs.md',
   sessionTelemetry: 'session-telemetry.md',
   agentTeams: 'agent-team.md',
@@ -208,6 +209,7 @@ export const EVENT_SCOPE_PAGE: Record<string, string> = {
   'skills': 'skills.md',
   'subagent': 'subagent.md',
   'system-prompt': 'system-prompt.md',
+  'tower-local': 'tower.md',
   'session-telemetry': 'session-telemetry.md',
   'feedback': 'feedback.md',
   'tools': 'tools.md',
@@ -660,6 +662,10 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   TypertPackageRecord: 'invariants.md',
   TypertSchemaFilter: 'invariants.md',
   TypertSchemaRecord: 'invariants.md',
+  TowerFinding: 'tower.md',
+  TowerMessage: 'tower.md',
+  TowerProvider: 'tower.md',
+  TowerReviewRound: 'tower.md',
 }
 
 /** TypeScript lib and pinned framework types with no repository-owned data page. */
@@ -772,6 +778,19 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   WorkspaceFileRange: 'Host workspace file endpoint contract is owned by packages/api/workspace-files/README.md',
   WorkspaceFileStat: 'Host workspace file endpoint contract is owned by packages/api/workspace-files/README.md',
   WorkspaceFileText: 'Host workspace file endpoint contract is owned by packages/api/workspace-files/README.md',
+  TowerLocalActivityNotice: 'event payload contract is owned by packages/tower/tower-local/src/events.ts',
+  TowerMissionId: 'branded mission identity is owned by packages/tower/tower/src/types.ts',
+  TowerModeState: 'mode read model is owned by packages/tower/tower/src/types.ts',
+  TowerWorkspaceInfo: 'workspace adoption result is owned by packages/tower/tower/src/types.ts',
+  TowerDashboard: 'dashboard read model is owned by packages/tower/tower/src/types.ts',
+  TowerSpawnRequest: 'mission spawn request is owned by packages/tower/tower/src/types.ts',
+  TowerMissionView: 'mission row read model is owned by packages/tower/tower/src/types.ts',
+  TowerMessageRequest: 'message request contract is owned by packages/tower/tower/src/types.ts',
+  TowerFindingRequest: 'finding request contract is owned by packages/tower/tower/src/types.ts',
+  TowerReviewRequest: 'review request contract is owned by packages/tower/tower/src/types.ts',
+  TowerMergeResult: 'merge result read model is owned by packages/tower/tower/src/types.ts',
+  TowerTeardownRequest: 'teardown request contract is owned by packages/tower/tower/src/types.ts',
+  TowerTeardownResult: 'teardown result read model is owned by packages/tower/tower/src/types.ts',
 }
 
 /** Repository data policy consumed by the Cordis catalog projector. */

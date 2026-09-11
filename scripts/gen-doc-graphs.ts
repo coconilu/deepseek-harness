@@ -84,6 +84,7 @@ const GROUP_ORDER = [
   'spill',
   'todo',
   'plan',
+  'tower',
   'cordis',
   'hooks',
   'session-persistence',
@@ -391,6 +392,15 @@ const SERVICE_ROLES: ServiceRole[] = [
     title: 'Plan collaboration state',
     mode: 'core',
     note: 'Folds logged plan/mode state, flushes user selections at turn boundaries, renders deployment-owned guidance, registers /plan, and keeps the plan-exit schema stable across transitions.',
+  },
+  {
+    key: 'tower',
+    pkg: 'tower',
+    title: 'Tower mission workspace facade',
+    mode: 'seam',
+    implementations: ['tower-local'],
+    consumers: ['tool-tower'],
+    note: 'Validates lead/mission-owner authority for every tower operation and delegates to the configured provider, which owns the .tower/ store, git worktrees, and mission children; the ten tower_* tools are the model-facing consumer.',
   },
   {
     key: 'agentPresets',
