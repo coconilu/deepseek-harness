@@ -66,17 +66,6 @@ declare module '@deepseek-ai/dsh-session/types' {
   }
 }
 
-declare module '@deepseek-ai/dsh-session-projection/types' {
-  interface SessionProjectionStateMap {
-    /** Host tower fold state. */
-    tower: TowerUnitState
-  }
-  interface SessionProjectionMap {
-    /** Tower mode folded from the tower command lifecycle and `tower/mode` events. */
-    tower: TowerProjection
-  }
-}
-
 /** Tower service plugin config: deployment-owned policy text and provider selection. */
 export interface Config {
   /** Policy rendered as the `tower:policy` prompt section while tower mode is active. */

@@ -369,26 +369,13 @@ export interface TowerProvider extends TowerOperations {
   validateBase(cwd: string, base: string): Promise<void>
 }
 
-/** Unit state of the `tower` session projection: logged tower mode. */
-export interface TowerUnitState {
-  /** The committed mode. */
-  readonly active: boolean
-  /** The base recorded with the latest activation. */
-  readonly base: string | null
-  /** The selected state awaiting the next accepted in-turn pre-step. */
-  readonly wanted: boolean | null
-  /** The running `/tower` command correlation, like the plan unit's. */
-  readonly running: { readonly wanted: boolean } | null
-  /** The committed mode at the last request header. */
-  readonly activeAtLastHeader: boolean | null
-}
+export type * from './projection.ts'
 
-/** Cropped wire view of the `tower` projection for client carriers. */
-export interface TowerProjection {
-  readonly active: boolean
-  readonly pending: boolean
-  /** The logged base branch when active. */
-  readonly base?: string
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** The tower capability, present when a tower service plugin is loaded. */
+    tower: TowerService
+  }
 }
 
 /** The logged tower mode of one session, as read by consumers. */
@@ -424,11 +411,4 @@ export interface TowerService extends TowerOperations {
    * @returns the committed mode and base.
    */
   mode(agent: Agent): TowerModeState
-}
-
-declare module '@deepseek-ai/cordis' {
-  interface Context {
-    /** The tower capability, present when a tower service plugin is loaded. */
-    tower: TowerService
-  }
 }
