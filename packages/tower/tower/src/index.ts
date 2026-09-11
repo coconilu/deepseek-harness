@@ -222,24 +222,7 @@ export class TowerService extends Service implements TowerServiceContract {
     this.section = resolved.section
     this.providerName = resolved.provider
     this.maxMissions = resolved.maxMissions
-    // Pre-step is outside Session.append publication, so it can append the
-    // log-only mode event inside an open turn without re-entering the session.
-    // A failed append remains pending for a later accepted in-turn pre-step,
-    // and policy cannot block the step.
-    ctx.on('agent/pre-step', async (
-      { agent, signal },
-      next,
-    ): Promise<PreStepDecision> => {
-      const decision = await next()
-      const pending = this.pendingIntents.get(agent.session)
-      if (decision.kind === 'reject' || signal.aborted || pending === undefined) return decision
-      try {
-        this.flushPending(agent.session, pending)
-      } catch (error) {
-        ctx.logger.warn('dsh-tower: failed to append selected tower mode at step start: %o', error)
-      }
-      return decision
-    })
+    ctx.on('agent/pre-step', (input, next) => this.onPreStep(input, next))
 
     ctx.systemPrompt.section({
       name: 'tower:policy',
@@ -433,6 +416,27 @@ export class TowerService extends Service implements TowerServiceContract {
     session.append('tower/mode', selection.active ? { active: true, base: selection.base } : { active: false })
     this.pendingIntents.delete(session)
     return 'committed'
+  }
+
+  /**
+   * Flush one pending selection at an accepted in-turn pre-step. The pre-step
+   * runs outside Session.append publication, so the log-only mode event lands
+   * inside an open turn without re-entering the session; a failed append
+   * stays pending for a later accepted pre-step and cannot block the step.
+   */
+  private async onPreStep(
+    { agent, signal }: { agent: Agent; signal: AbortSignal },
+    next: () => Promise<PreStepDecision>,
+  ): Promise<PreStepDecision> {
+    const decision = await next()
+    const pending = this.pendingIntents.get(agent.session)
+    if (decision.kind === 'reject' || signal.aborted || pending === undefined) return decision
+    try {
+      this.flushPending(agent.session, pending)
+    } catch (error) {
+      this.ctx.logger.warn('dsh-tower: failed to append selected tower mode at step start: %o', error)
+    }
+    return decision
   }
 
   /** Append one pending selection at an accepted in-turn pre-step. */
