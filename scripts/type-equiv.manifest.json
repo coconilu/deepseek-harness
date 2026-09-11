@@ -2143,6 +2143,11 @@
     },
     {
       "doc": "docs/subsystems/tower.md",
+      "symbol": "TowerOperations",
+      "source": "packages/tower/tower/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/tower.md",
       "symbol": "TowerService",
       "source": "packages/tower/tower/src/types.ts"
     },

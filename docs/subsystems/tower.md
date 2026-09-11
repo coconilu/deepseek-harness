@@ -150,146 +150,21 @@ Every operation appends one activity entry, and the local provider emits each en
 
 A merge is refused loudly unless every condition holds: the mission is `approved`, the latest review round is an approval whose recorded commit still equals the branch tip, the mission worktree is clean, and the main checkout sits on the recorded base. The gate then merges with `--no-ff`, records the merge commit, removes the mission worktree, and marks the mission `merged`; a retry after a late failure is safe because git reports the up-to-date state and the gate re-passes. The tip-match condition is what makes the review verdict apply to an exact commit: any post-review change re-opens the mission for review. The merge-side contract is additionally watched by the provider's invariant companion, which fails a merge activity entry that has no approving review round for its exact commit.
 
-## The service contract
+## The shared operations
 
-`ctx.tower` owns the logged mode, the provider registry, and caller-authority validation; every operation delegates to the provider named in config once authority passes. `init`, `spawnMission`, `abortMission`, `recordReview`, `merge`, and `teardown` are lead-only — the caller's session must carry active tower mode. `status`, `sendMessage`, `inbox`, `recordFinding`, and `listFindings` additionally admit recorded mission owners, a durable check that reads the mission records and survives cold resume. `spawnMission` refuses beyond the configured mission bound, and `/tower` selection states ride the same pending-flush machinery described above.
-
-```ts type-equiv
-/**
- * The tower capability published as `ctx.tower`. The service owns the logged
- * mode, provider registry, and caller-authority validation; every operation
- * delegates to the provider selected by Config once authority passes. The
- * contract lives on the `./types` face so provider packages compile against
- * contracts alone.
- *
- * Authority: `init`, `spawnMission`, `abortMission`, `recordReview`, `merge`,
- * and `teardown` are lead-only — the caller's session must carry active tower
- * mode. `status`, `sendMessage`, `inbox`, `recordFinding`, and
- * `listFindings` additionally admit recorded mission owners.
- */
-interface TowerService {
-  /**
-   * Register one backend under its {@link TowerProvider.name}. The
-   * registration is an owned effect: disposing the caller's fiber removes it.
-   * @param provider - the backend to publish.
-   */
-  registerProvider(provider: TowerProvider): void
-  /**
-   * Read the logged tower mode of `agent`'s session.
-   * @param agent - the session-owning Agent.
-   * @returns the committed mode and base.
-   */
-  mode(agent: Agent): TowerModeState
-  /**
-   * Create or adopt the caller's workspace (lead-only).
-   * @param caller - exact live lead Agent.
-   * @returns the workspace and adoption facts.
-   */
-  init(caller: Agent): Promise<TowerWorkspaceInfo>
-  /**
-   * Read the tower dashboard (lead or mission owner).
-   * @param caller - exact live lead or mission Agent.
-   * @returns the current dashboard.
-   */
-  status(caller: Agent): Promise<TowerDashboard>
-  /**
-   * Spawn one mission in an isolated worktree (lead-only); refuses loudly
-   * beyond the configured mission bound.
-   * @param caller - exact live lead Agent.
-   * @param request - title, complete task prompt, and caller cancellation.
-   * @returns the active mission row.
-   */
-  spawnMission(caller: Agent, request: TowerSpawnRequest): Promise<TowerMissionView>
-  /**
-   * Interrupt a mission's live child and mark it `aborted` (lead-only).
-   * @param caller - exact live lead Agent.
-   * @param id - the mission to abort.
-   * @returns the updated mission row.
-   */
-  abortMission(caller: Agent, id: TowerMissionId): Promise<TowerMissionView>
-  /**
-   * Record and deliver one lead-mediated message (lead or mission owner).
-   * @param caller - exact live lead or mission Agent.
-   * @param request - address, content, and pre-delivery cancellation.
-   * @returns the recorded message.
-   */
-  sendMessage(caller: Agent, request: TowerMessageRequest): Promise<TowerMessage>
-  /**
-   * Read the caller's inbox slice (lead or mission owner).
-   * @param caller - exact live lead or mission Agent.
-   * @param limit - maximum messages returned.
-   * @returns messages addressed to the caller, newest last.
-   */
-  inbox(caller: Agent, limit?: number): Promise<TowerMessage[]>
-  /**
-   * Persist one shared finding (lead or mission owner).
-   * @param caller - exact live lead or mission Agent.
-   * @param request - finding title and body.
-   * @returns the recorded finding.
-   */
-  recordFinding(caller: Agent, request: TowerFindingRequest): Promise<TowerFinding>
-  /**
-   * List every recorded finding (lead or mission owner).
-   * @param caller - exact live lead or mission Agent.
-   * @returns all findings in creation order.
-   */
-  listFindings(caller: Agent): Promise<TowerFinding[]>
-  /**
-   * Append one review round, stamping the mission's current branch tip
-   * (lead-only).
-   * @param caller - exact live lead Agent.
-   * @param request - mission, verdict, and review summary.
-   * @returns the recorded round.
-   */
-  recordReview(caller: Agent, request: TowerReviewRequest): Promise<TowerReviewRound>
-  /**
-   * Merge one approved mission branch into the base through the review gate
-   * (lead-only).
-   * @param caller - exact live lead Agent.
-   * @param id - the mission to merge.
-   * @returns the merged mission and its merge commit.
-   */
-  merge(caller: Agent, id: TowerMissionId): Promise<TowerMergeResult>
-  /**
-   * End the workspace's active work, keeping `.tower/` as the audit trail
-   * (lead-only).
-   * @param caller - exact live lead Agent.
-   * @param request - whether to remove dirty worktrees, and cancellation.
-   * @returns removal and interruption facts.
-   */
-  teardown(caller: Agent, request: TowerTeardownRequest): Promise<TowerTeardownResult>
-  /**
-   * Whether `session` owns an unmerged mission.
-   * @param session - the candidate session.
-   * @returns true when the session is a recorded mission owner.
-   */
-  isMissionOwner(session: Session): Promise<boolean>
-}
-```
-
-## The provider contract
-
-Providers own the workspace store, git, and mission child lifecycle; the service validates mode and caller authority before delegating. `validateBase` runs at command time so a base typo fails before anything is logged, and `isMissionOwner` is the durable authority behind mission-side operations.
+`TowerOperations` is not exported from `@deepseek-ai/dsh-tower/types`; both role interfaces below extend it, so its twelve operation contracts surface on `ctx.tower` and on every provider implementation.
 
 ```ts type-equiv
 /**
- * The provider role of the tower capability seam: owns the `.tower/`
- * coordination store, git worktrees, and mission children, registered under
- * {@link TowerProvider.name}. The Service Definition routes every facade
- * operation to the configured provider; lead-only authority is re-validated
- * above it, so providers may assume the caller is authorized.
+ * The tower operations the seam's two roles share: the Service Definition
+ * (`TowerService`) validates the caller's authority and routes each operation
+ * to the provider (`TowerProvider`), which implements it. Each method's
+ * contract and caller authority are declared here once; the role interfaces
+ * add only their own lifecycle members.
  */
-interface TowerProvider {
-  /** Unique registry name (e.g. `local`). */
-  readonly name: string
+interface TowerOperations {
   /**
-   * Assert `base` names a local branch of the git work tree containing `cwd`.
-   * Called by the `/tower on` command before the mode is logged, so a typo
-   * fails at the earliest resolvable point.
-   */
-  validateBase(cwd: string, base: string): Promise<void>
-  /**
-   * Create the workspace under the lead session's git root, or adopt an
+   * Create the workspace under the caller session's git root, or adopt an
    * existing one: the recorded base must match the session's logged tower
    * base, missions carry over, and owners no longer live are reconciled to
    * `interrupted`.
@@ -312,10 +187,7 @@ interface TowerProvider {
    * owning the operation until initial inbox acceptance.
    * @returns the active mission row.
    */
-  spawnMission(
-    caller: Agent,
-    request: TowerSpawnRequest,
-  ): Promise<TowerMissionView>
+  spawnMission(caller: Agent, request: TowerSpawnRequest): Promise<TowerMissionView>
   /**
    * Interrupt the mission's live child (preserving its inbox) and mark the
    * mission `aborted`; its branch and worktree stay for inspection.
@@ -332,14 +204,11 @@ interface TowerProvider {
    * @param request - address, content, and pre-delivery cancellation.
    * @returns the recorded message.
    */
-  sendMessage(
-    caller: Agent,
-    request: TowerMessageRequest,
-  ): Promise<TowerMessage>
+  sendMessage(caller: Agent, request: TowerMessageRequest): Promise<TowerMessage>
   /**
    * Read messages addressed to the caller (`all` included), newest last.
    * @param caller - exact live lead or mission Agent.
-   * @param limit - maximum messages returned, newest first before re-ordering.
+   * @param limit - maximum messages returned, taken from the newest.
    * @returns the caller's inbox slice.
    */
   inbox(caller: Agent, limit?: number): Promise<TowerMessage[]>
@@ -358,22 +227,18 @@ interface TowerProvider {
   listFindings(caller: Agent): Promise<TowerFinding[]>
   /**
    * Append one review round for a mission, stamping the current branch tip.
-   * `approve` moves the mission to `approved`; `reject` returns it to
-   * `active` for rework.
+   * `approve` marks the mission `approved`; `reject` returns it to `active`
+   * for rework.
    * @param caller - exact live lead Agent.
    * @param request - mission, verdict, and review summary.
    * @returns the recorded round.
    */
-  recordReview(
-    caller: Agent,
-    request: TowerReviewRequest,
-  ): Promise<TowerReviewRound>
+  recordReview(caller: Agent, request: TowerReviewRequest): Promise<TowerReviewRound>
   /**
    * Merge one mission branch back into the base. The merge gate refuses
-   * loudly unless the mission is `approved`, the latest review round's
-   * commit still equals the branch tip, and the main checkout sits on the
-   * recorded base. On success the worktree is removed and the mission is
-   * `merged`.
+   * loudly unless the mission is `approved`, the latest review round's commit
+   * still equals the branch tip, and the main checkout sits on the recorded
+   * base. On success the worktree is removed and the mission is `merged`.
    * @param caller - exact live lead Agent.
    * @param id - the mission to merge.
    * @returns the merged mission and its merge commit.
@@ -400,6 +265,65 @@ interface TowerProvider {
 }
 ```
 
+## The service contract
+
+`ctx.tower` owns the logged mode, the provider registry, and caller-authority validation; every operation delegates to the provider named in config once authority passes. `init`, `spawnMission`, `abortMission`, `recordReview`, `merge`, and `teardown` are lead-only — the caller's session must carry active tower mode. `status`, `sendMessage`, `inbox`, `recordFinding`, and `listFindings` additionally admit recorded mission owners, a durable check that reads the mission records and survives cold resume. `spawnMission` refuses beyond the configured mission bound, and `/tower` selection states ride the same pending-flush machinery described above.
+
+```ts type-equiv
+/**
+ * The tower capability published as `ctx.tower`. The service owns the logged
+ * mode, provider registry, and caller-authority validation; every inherited
+ * operation delegates to the provider selected by Config once authority
+ * passes. The contract lives on the `./types` face so provider packages
+ * compile against contracts alone.
+ *
+ * Authority: `init`, `spawnMission`, `abortMission`, `recordReview`, `merge`,
+ * and `teardown` are lead-only — the caller's session must carry active tower
+ * mode. `status`, `sendMessage`, `inbox`, `recordFinding`, and
+ * `listFindings` additionally admit recorded mission owners.
+ */
+interface TowerService extends TowerOperations {
+  /**
+   * Register one backend under its {@link TowerProvider.name}. The
+   * registration is an owned effect: disposing the caller's fiber removes it.
+   * @param provider - the backend to publish.
+   */
+  registerProvider(provider: TowerProvider): void
+  /**
+   * Read the logged tower mode of `agent`'s session.
+   * @param agent - the session-owning Agent.
+   * @returns the committed mode and base.
+   */
+  mode(agent: Agent): TowerModeState
+}
+```
+
+## The provider contract
+
+Providers own the workspace store, git, and mission child lifecycle; the service validates mode and caller authority before delegating. `validateBase` runs at command time so a base typo fails before anything is logged, and `isMissionOwner` is the durable authority behind mission-side operations.
+
+```ts type-equiv
+/**
+ * The provider role of the tower capability seam: owns the `.tower/`
+ * coordination store, git worktrees, and mission children, registered under
+ * {@link TowerProvider.name}. The Service Definition routes every facade
+ * operation to the configured provider; lead-only authority is re-validated
+ * above it, so providers may assume the caller is authorized. The shipped
+ * provider is `local`: it keeps the coordination store under the workspace's
+ * `.tower/` directory and drives git through the subprocess seam.
+ */
+interface TowerProvider extends TowerOperations {
+  /** Unique registry name (e.g. `local`). */
+  readonly name: string
+  /**
+   * Assert `base` names a local branch of the git work tree containing `cwd`.
+   * Called by the `/tower on` command before the mode is logged, so a typo
+   * fails at the earliest resolvable point.
+   */
+  validateBase(cwd: string, base: string): Promise<void>
+}
+```
+
 The operation-local request types (`TowerSpawnRequest`, `TowerMessageRequest`, `TowerFindingRequest`, `TowerReviewRequest`, `TowerTeardownRequest`) carry each call's inputs plus the caller cancellation or bound, and the result types (`TowerWorkspaceInfo`, `TowerDashboard`, `TowerMissionView`, `TowerMergeResult`, `TowerTeardownResult`) are pure read models over the durable records.
 
 ## The shipped provider
@@ -418,7 +342,7 @@ Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnp
 
 ### `ctx.tower` — `TowerService`
 
-The tower capability published as `ctx.tower`. The service owns the logged mode, provider registry, and caller-authority validation; every operation delegates to the provider selected by Config once authority passes. The contract lives on the `./types` face so provider packages compile against contracts alone.
+The tower capability published as `ctx.tower`. The service owns the logged mode, provider registry, and caller-authority validation; every inherited operation delegates to the provider selected by Config once authority passes. The contract lives on the `./types` face so provider packages compile against contracts alone.
 
 Authority: `init`, `spawnMission`, `abortMission`, `recordReview`, `merge`, and `teardown` are lead-only — the caller's session must carry active tower mode. `status`, `sendMessage`, `inbox`, `recordFinding`, and `listFindings` additionally admit recorded mission owners.
 
@@ -436,105 +360,9 @@ registerProvider(provider: TowerProvider): void
  * @returns the committed mode and base.
  */
 mode(agent: Agent): TowerModeState
-
-/**
- * Create or adopt the caller's workspace (lead-only).
- * @param caller - exact live lead Agent.
- * @returns the workspace and adoption facts.
- */
-init(caller: Agent): Promise<TowerWorkspaceInfo>
-
-/**
- * Read the tower dashboard (lead or mission owner).
- * @param caller - exact live lead or mission Agent.
- * @returns the current dashboard.
- */
-status(caller: Agent): Promise<TowerDashboard>
-
-/**
- * Spawn one mission in an isolated worktree (lead-only); refuses loudly
- * beyond the configured mission bound.
- * @param caller - exact live lead Agent.
- * @param request - title, complete task prompt, and caller cancellation.
- * @returns the active mission row.
- */
-spawnMission(caller: Agent, request: TowerSpawnRequest): Promise<TowerMissionView>
-
-/**
- * Interrupt a mission's live child and mark it `aborted` (lead-only).
- * @param caller - exact live lead Agent.
- * @param id - the mission to abort.
- * @returns the updated mission row.
- */
-abortMission(caller: Agent, id: TowerMissionId): Promise<TowerMissionView>
-
-/**
- * Record and deliver one lead-mediated message (lead or mission owner).
- * @param caller - exact live lead or mission Agent.
- * @param request - address, content, and pre-delivery cancellation.
- * @returns the recorded message.
- */
-sendMessage(caller: Agent, request: TowerMessageRequest): Promise<TowerMessage>
-
-/**
- * Read the caller's inbox slice (lead or mission owner).
- * @param caller - exact live lead or mission Agent.
- * @param limit - maximum messages returned.
- * @returns messages addressed to the caller, newest last.
- */
-inbox(caller: Agent, limit?: number): Promise<TowerMessage[]>
-
-/**
- * Persist one shared finding (lead or mission owner).
- * @param caller - exact live lead or mission Agent.
- * @param request - finding title and body.
- * @returns the recorded finding.
- */
-recordFinding(caller: Agent, request: TowerFindingRequest): Promise<TowerFinding>
-
-/**
- * List every recorded finding (lead or mission owner).
- * @param caller - exact live lead or mission Agent.
- * @returns all findings in creation order.
- */
-listFindings(caller: Agent): Promise<TowerFinding[]>
-
-/**
- * Append one review round, stamping the mission's current branch tip
- * (lead-only).
- * @param caller - exact live lead Agent.
- * @param request - mission, verdict, and review summary.
- * @returns the recorded round.
- */
-recordReview(caller: Agent, request: TowerReviewRequest): Promise<TowerReviewRound>
-
-/**
- * Merge one approved mission branch into the base through the review gate
- * (lead-only).
- * @param caller - exact live lead Agent.
- * @param id - the mission to merge.
- * @returns the merged mission and its merge commit.
- */
-merge(caller: Agent, id: TowerMissionId): Promise<TowerMergeResult>
-
-/**
- * End the workspace's active work, keeping `.tower/` as the audit trail
- * (lead-only).
- * @param caller - exact live lead Agent.
- * @param request - whether to remove dirty worktrees, and cancellation.
- * @returns removal and interruption facts.
- */
-teardown(caller: Agent, request: TowerTeardownRequest): Promise<TowerTeardownResult>
-
-/**
- * Whether `session` owns an unmerged mission.
- * @param session - the candidate session.
- * @returns true when the session is a recorded mission owner.
- */
-isMissionOwner(session: Session): Promise<boolean>
 ```
 
-Types: [Agent](core.md) · [Session](session.md)
+Types: [Agent](core.md)
 
 Source: [`packages/tower/tower/src/types.ts`](../../packages/tower/tower/src/types.ts)
 
