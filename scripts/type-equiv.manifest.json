@@ -2105,6 +2105,51 @@
       "doc": "packages/client/ui-conversation/README.md",
       "symbol": "ComposerChainProps",
       "source": "packages/client/ui-conversation/src/client/contract/slots.ts"
+    },
+    {
+      "doc": "docs/subsystems/tower.md",
+      "symbol": "TowerWorkspace",
+      "source": "packages/tower/tower/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/tower.md",
+      "symbol": "TowerMissionStatus",
+      "source": "packages/tower/tower/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/tower.md",
+      "symbol": "TowerMission",
+      "source": "packages/tower/tower/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/tower.md",
+      "symbol": "TowerReviewRound",
+      "source": "packages/tower/tower/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/tower.md",
+      "symbol": "TowerFinding",
+      "source": "packages/tower/tower/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/tower.md",
+      "symbol": "TowerMessage",
+      "source": "packages/tower/tower/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/tower.md",
+      "symbol": "TowerActivityEntry",
+      "source": "packages/tower/tower/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/tower.md",
+      "symbol": "TowerService",
+      "source": "packages/tower/tower/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/tower.md",
+      "symbol": "TowerProvider",
+      "source": "packages/tower/tower/src/types.ts"
     }
   ]
 }

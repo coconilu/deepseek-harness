@@ -19,7 +19,7 @@ packages/    @deepseek-ai/dsh-<pkg> workspaces at packages/<group>/<pkg>/
   llm/         LLM capability: Service Definition/Consumer + DeepSeek providers
   e2b/         E2B POC: sandbox + FS/subprocess adapters
   shell/        bash capability: Service Definition + local/pwsh providers + shell Consumers
-  subprocess/  subprocess capability + local process-tree provider + shared Win32 library
+  subprocess/  subprocess capability + local process-tree provider
   terminal/         persistent sessions
   fs/          filesystem capability + policy
   lsp/         language-server capability
@@ -28,6 +28,7 @@ packages/    @deepseek-ai/dsh-<pkg> workspaces at packages/<group>/<pkg>/
   compaction/     compaction capability + basic provider
   context/     request-context plugins
   subagent/    subagent capability: Service Definition + providers + delegation Consumers
+  tower/       mission worktrees + review-gated merge
   bundle/      installable dsh --profile patch-layer bundles
   workflow/    workflow capability + worker-thread provider + tool Consumer
   webhook/     webhook ingress
@@ -41,7 +42,7 @@ packages/    @deepseek-ai/dsh-<pkg> workspaces at packages/<group>/<pkg>/
   identity/    anonymous identity
   settings/    user-settings capability + file provider
   credentials/ credential/authorization capabilities + env/.env provider
-  acp/         automation-only Agent Client Protocol server
+  acp/         automation-only ACP server
   interaction/ approval/interaction capabilities, permission, commands, ask-user
   boot/        shared profile/application boot glue
   sdk/         JSON-RPC protocol + TypeScript client/server

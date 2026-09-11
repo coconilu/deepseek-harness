@@ -128,7 +128,7 @@ A **seam** is a swappable capability with three roles: a **Service Definition** 
 
 Seams are why one provider swap changes the whole product. Filesystem and subprocess providers share one execution world, so pointing them at a remote sandbox moves Bash, PTY, and LSP with them, with no provider forks. [Subagent providers](subsystems/subagent.md) vary just as widely behind one interface, from a fresh child agent to a delegated turn in another product.
 
-[Experimental Agent Teams](subsystems/agent-team.md) is a published opt-in coordination seam on `ctx.agentTeams`, with a durable roster, task board, and mailbox layered over continuable subagents.
+Two opt-in coordination seams layer over continuable subagents: [Agent Teams](subsystems/agent-team.md) on `ctx.agentTeams` (roster, task board, mailbox) and [tower mode](subsystems/tower.md) on `ctx.tower` (mission worktrees fan out from a lead and merge back through a review gate).
 
 ## Where new behavior goes
 
@@ -142,6 +142,7 @@ New behavior attaches to a documented extension point. Changing the loop itself 
 | Add shell execution | register a `ctx.shell` backend; the local one spawns through `ctx.subprocess` |
 | Add persistent terminal execution | register a `ctx.terminals` backend plus `dsh-tool-terminal` |
 | Add a human command | register on `ctx.commands`; it dispatches without a model turn |
+| Fan missions out to worktrees | turn tower mode on; `tower_*` tools spawn, review, and merge |
 | Add background work | register on `ctx.jobs`; `job_*` tools collect or stop it |
 | Start a Session from an external webhook | register a trusted rule on `ctx.webhookRuntime` and mount a provider adapter |
 | Add filesystem access or policy | register a `ctx.fs` provider or listen to `fs/*` events |
