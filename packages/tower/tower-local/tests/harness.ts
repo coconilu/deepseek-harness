@@ -35,6 +35,7 @@ import TowerService from '@deepseek-ai/dsh-tower'
 import * as TowerLocal from '@deepseek-ai/dsh-tower-local'
 import { TowerMissionId } from '@deepseek-ai/dsh-tower/types'
 import type { TowerMission } from '@deepseek-ai/dsh-tower/types'
+import type { LocalTowerConfig } from '../src/provider.ts'
 import { LocalTowerProvider } from '../src/provider.ts'
 import { TowerStore } from '../src/store.ts'
 import { MockAdapter, textResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
@@ -251,8 +252,13 @@ export function makePlainDir(): string {
   return dir
 }
 
+/** The continuable-start spec one mission spawn hands to the subagents seam. */
+type SubagentStartSpec = Parameters<Context['subagents']['startContinuable']>[0]
+
 /** Deliveries and interrupts captured against a stubbed subagents service. */
 export interface SubagentCapture {
+  /** The startContinuable specs the provider passed, in call order. */
+  readonly started: SubagentStartSpec[]
   readonly sent: { readonly sender: Agent; readonly target: SessionId; readonly text: string }[]
   readonly interrupted: SessionId[]
   readonly drained: SessionId[][]
@@ -264,10 +270,11 @@ export interface SubagentCapture {
  */
 export function stubSubagents(ctx: Context, errors: { readonly start?: Error; readonly send?: Error } = {}): SubagentCapture {
   type Service = Context['subagents']
-  const capture: SubagentCapture = { sent: [], interrupted: [], drained: [] }
+  const capture: SubagentCapture = { started: [], sent: [], interrupted: [], drained: [] }
   ctx.provide('subagents', {
-    startContinuable: async () => {
+    startContinuable: async (spec: SubagentStartSpec) => {
       if (errors.start !== undefined) throw errors.start
+      capture.started.push(spec)
       return { childId: SessionId('stub-child') }
     },
     interrupt: (target: SessionId) => {
@@ -325,10 +332,18 @@ export async function minimalContext(mode: { active: boolean; base: string | nul
   return ctx
 }
 
-/** Direct provider over a minimal context, with a lead-shaped caller rooted at `repo`. */
-export async function minimalProvider(repo: string): Promise<{ ctx: Context; provider: LocalTowerProvider; caller: Agent }> {
+/**
+ * Direct provider over a minimal context, with a lead-shaped caller rooted at `repo`.
+ * @param repo - the git repo the caller's session cwd points at.
+ * @param config - overrides for the materialized provider config.
+ */
+export async function minimalProvider(repo: string, config: Partial<LocalTowerConfig> = {}): Promise<{
+  ctx: Context
+  provider: LocalTowerProvider
+  caller: Agent
+}> {
   const ctx = await minimalContext()
-  const provider = new LocalTowerProvider(ctx, { childProvider: 'spawn', activityTail: 50 })
+  const provider = new LocalTowerProvider(ctx, { childProvider: 'spawn', childToolFilter: [], activityTail: 50, ...config })
   return { ctx, provider, caller: looseAgent(ctx, 'probe', { cwd: repo }) }
 }
 
@@ -345,7 +360,7 @@ export async function noGitProvider(repo: string): Promise<{ provider: LocalTowe
   trackCleanup(async () => {
     await ctx.fiber.dispose()
   })
-  const provider = new LocalTowerProvider(ctx, { childProvider: 'spawn', activityTail: 50 })
+  const provider = new LocalTowerProvider(ctx, { childProvider: 'spawn', childToolFilter: [], activityTail: 50 })
   return { provider, caller: looseAgent(ctx, 'probe', { cwd: repo }) }
 }
 

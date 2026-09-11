@@ -8,7 +8,10 @@ import { existsSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
+import { scopeOf } from '@deepseek-ai/dsh-scope'
 import { SessionId } from '@deepseek-ai/dsh-session'
+import { defineContentToolFixture } from '@deepseek-ai/dsh-tools'
 import { TowerMissionId } from '@deepseek-ai/dsh-tower/types'
 import { TowerStore } from '../src/store.ts'
 import {
@@ -85,6 +88,57 @@ describe('spawnMission', () => {
     const activity = await store.readActivity()
     expect(activity.some(entry => entry.detail.includes('mission child failed to start: child boom'))).toBe(true)
   }, 60_000)
+
+  it('passes a non-empty child tool filter to the mission child start', async () => {
+    const repo = makeGitRepo()
+    const { ctx, provider, caller } = await minimalProvider(repo, { childToolFilter: ['tower_spawn', 'tower_review'] })
+    const capture = stubSubagents(ctx)
+    await seedWorkspace(repo)
+    await provider.spawnMission(caller, { title: 'x', prompt: 'x', signal: testSignal() })
+    expect(capture.started).toHaveLength(1)
+    expect(capture.started.at(0)?.request.toolFilter).toEqual({ deny: ['tower_spawn', 'tower_review'] })
+  }, 60_000)
+
+  it('omits the tool filter when the child tool filter is empty', async () => {
+    const repo = makeGitRepo()
+    const { ctx, provider, caller } = await minimalProvider(repo)
+    const capture = stubSubagents(ctx)
+    await seedWorkspace(repo)
+    await provider.spawnMission(caller, { title: 'x', prompt: 'x', signal: testSignal() })
+    expect(capture.started).toHaveLength(1)
+    expect(capture.started.at(0)?.request).not.toHaveProperty('toolFilter')
+  }, 60_000)
+
+  it('composes mission children with the configured deny list through the real stack', async () => {
+    const repo = makeGitRepo()
+    const booted = await bootedWorkspace(repo, ['    childToolFilter:', '      - probe_denied'], { hangFirst: 1 })
+    booted.ctx.tools.register(defineContentToolFixture({
+      name: 'probe_denied',
+      description: 'probe tool that must vanish from mission children',
+      parameters: {},
+      execute: () => Promise.resolve([]),
+    }))
+    const view = await spawn(booted, 'one')
+    const child = liveChild(booted.ctx, view.owner)
+    const childScope = scopeOf(child.ctx)
+    if (childScope === undefined) throw new Error('expected the mission child to carry an agent scope')
+    const childNames = (await booted.ctx.systemPrompt.assemble({ scope: childScope })).tools.map(schema => schema.name)
+    expect(childNames).not.toContain('probe_denied')
+    const denied = await booted.ctx.tools.execute({
+      callId: ToolCallId('tower-local-filter-probe'),
+      name: 'probe_denied',
+      arguments: {},
+      signal: testSignal(),
+      agent: child,
+    })
+    expect(denied.isError).toBe(true)
+    expect(denied.content.filter(block => block.type === 'text').map(block => block.text).join(''))
+      .toContain('unknown tool "probe_denied"')
+    const leadScope = scopeOf(booted.lead.ctx)
+    if (leadScope === undefined) throw new Error('expected the lead to carry an agent scope')
+    const leadNames = (await booted.ctx.systemPrompt.assemble({ scope: leadScope })).tools.map(schema => schema.name)
+    expect(leadNames).toContain('probe_denied')
+  }, 90_000)
 })
 
 describe('abortMission', () => {
