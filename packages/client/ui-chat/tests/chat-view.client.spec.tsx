@@ -2867,5 +2867,11 @@ describe('ChatView', () => {
     const failedView = render(<failed.ChatView {...failed.props} />)
     expect(failedView.getByText('Compaction cancelled.')).toBeTruthy()
     expect(failedView.container.querySelector('[data-state="error"]')).not.toBeNull()
+    // An error's full text stays reachable even when the one-line summary
+    // ellipsizes: the row discloses the raw settlement text.
+    const row = failedView.getByRole('button', { name: /compact/ })
+    expect(row.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(row)
+    expect(failedView.container.querySelector('pre')?.textContent).toBe('Compaction cancelled.')
   })
 })

@@ -33,7 +33,9 @@ export function GenericCommandCard({ node, t, runningSummary }: GenericCommandCa
   // command name.
   const title = node.name ?? t('command.title')
   const state = stateOf(node.outcome)
-  const body = text !== undefined && text.includes('\n') ? text : null
+  // An error's full text must stay reachable even when the one-line summary
+  // ellipsizes it, so every error with text discloses.
+  const body = text !== undefined && (text.includes('\n') || state === 'error') ? text : null
   const open = expanded && body !== null
   return (
     <div className={css.root} data-variant="others" data-state={state}>

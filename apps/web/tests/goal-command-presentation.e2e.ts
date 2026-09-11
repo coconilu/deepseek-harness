@@ -2,6 +2,7 @@
 // command remains log-only. The shipped composition runs with no model adapter,
 // so an accidental turn fails loud in addition to the event-level assertions.
 import { fileURLToPath } from 'node:url'
+import { basename, join } from 'node:path'
 import type { Browser, Page } from 'playwright'
 import { chromium } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
@@ -134,5 +135,47 @@ describe('web e2e: /goal human transcript presentation', () => {
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
     await assertFixtureInventory(SNAPSHOT_DIR, ['ui.expected.md'])
+  }, 90_000)
+
+  it('renders a generic host command result on a fresh session without a model turn', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-generic-command-result-visibility'))
+    // Unlike /goal, a generic command contributes no special echo node: its
+    // durable `command/done` row is the only visible outcome. On a fresh blank
+    // session the whole transcript stays hidden until the submission itself
+    // leaves the blank shell phase — the regression surface where error
+    // results used to be swallowed outright.
+    const workspaceTitle = basename(join(scaffold.workspaceCwd, 'workspace'))
+    const workspaceRow = page.getByText(workspaceTitle, { exact: true }).first()
+      .locator('xpath=ancestor::*[@role="treeitem"][1]')
+    await workspaceRow.waitFor({ timeout: 15_000 })
+    if (await workspaceRow.getAttribute('aria-expanded') !== 'true') await workspaceRow.click()
+    await workspaceRow.hover()
+    await page.getByRole('button', { name: `New session in ${workspaceTitle}` }).click()
+    const input = page.locator('[data-composer-input]').first()
+    await input.waitFor({ timeout: 15_000 })
+    const eventsBefore = events.length
+
+    await input.fill('/feedback the diff view is unreadable')
+    await input.press('Enter')
+
+    await expect.poll(() => page.getByText(/Feedback recorded for session/).count(), {
+      timeout: 15_000,
+    }).toBe(1)
+    expect(await page.getByText(/Anonymous user: [0-9a-f-]+\.$/i).count()).toBe(1)
+    await expect.poll(() => page.locator('[data-phase="active"]').count(), {
+      timeout: 10_000,
+    }).toBe(1)
+    // The submission consumed the draft: silence would read as "no reaction".
+    await expect.poll(() => input.textContent(), { timeout: 10_000 }).toBe('')
+
+    // This session's command plane settled log-only: no model turn may have
+    // started for it.
+    const recent = events.slice(eventsBefore)
+    expect(recent.some(event => event.type === 'command/run')).toBe(true)
+    expect(recent.some(event => event.type === 'command/done')).toBe(true)
+    expect(recent.some(event => event.type === 'user/message')).toBe(false)
+    expect(recent.some(event => event.type === 'turn/start')).toBe(false)
+
+    expect(tripwire.pageErrors).toEqual([])
   }, 90_000)
 })

@@ -1066,7 +1066,16 @@ function locationIdentity(location: ConversationLocation): string {
 export const chatViewDefinition: ConversationViewDefinition<ChatConversationViewNode, ChatSnapshot> = {
   target: 'chat',
   create: () => new ChatSnapshotBuilder(),
-  isActive: snapshot => snapshot.order.some(key => snapshot.nodes.get(key)?.kind !== 'command'),
+  // A settled command carrying a visible result is activity: a command-only
+  // transcript must leave the blank shell phase or its row — including an
+  // error result — never renders.
+  isActive: snapshot => snapshot.order.some((key) => {
+    const node = snapshot.nodes.get(key) as ChatNode | undefined
+    if (node === undefined) return false
+    if (node.kind !== 'command') return true
+    const outcome = node.data.outcome
+    return outcome !== null && (outcome.kind === 'error' || outcome.text !== undefined)
+  }),
 }
 
 /**

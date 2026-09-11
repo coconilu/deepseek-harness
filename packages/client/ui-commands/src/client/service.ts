@@ -371,6 +371,7 @@ export class CommandUiRuntime extends Service implements CommandUiContract {
     line: string,
     attachments: readonly SubmitAttachment[] = [],
   ): Promise<SubmitOutcome> {
+    this.engageSubmission(session, line)
     const result = await this.ctx.remote.commands.execute(session.sessionId, line, attachments)
     if (!result.ok) throw new Error(`command.execute failed: ${result.error.code}: ${result.error.message}`)
     if (result.value === undefined) return { kind: 'error', text: `unknown or malformed command: ${line}` }
@@ -381,6 +382,22 @@ export class CommandUiRuntime extends Service implements CommandUiContract {
       return { kind: 'error', text: result.value.result.text }
     }
     return { kind: 'success' }
+  }
+
+  /**
+   * Mark one command submission as user activity, exactly as a prompt does:
+   * the session's blank → engaging edge is what lets the transcript render,
+   * and the durable `command/run`/`command/done` nodes are the submission's
+   * only visible outcome. Without this edge a command on a fresh session
+   * keeps the shell in the blank phase and the outcome — including an error
+   * result — never renders. The echo retires in the same tick because no
+   * durable user message will ever observe a command's submission identity.
+   */
+  private engageSubmission(session: ClientSessionContext, line: string): void {
+    const binding = this.sessions().binding(session.sessionId)
+    if (binding === undefined) return
+    const submission = binding.session.beginSubmission({ mode: 'queue', text: line, attachments: [] })
+    submission.abandon()
   }
 
   /** Publish the local acknowledgment without letting an observer change command admission. */

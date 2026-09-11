@@ -104,12 +104,28 @@ async function bench(opts: BenchOptions = {}) {
   })
   // Real scope tags behind a fake sessions face.
   const scopes = new Map<SessionId, { ctx: Context; fiber: { dispose(): Promise<void> } }>()
+  // Submission-echo records: one per beginSubmission, keyed by session.
+  const submissions: Array<{
+    sessionId: SessionId
+    text: string
+    attachments: number
+    abandoned: boolean
+  }> = []
+  const bindings = new Map<SessionId, {
+    session: {
+      beginSubmission(input: { mode: string; text: string; attachments: readonly unknown[] }): {
+        requestId: unknown
+        abandon(): void
+      }
+    }
+  }>()
   ctx.provide('sessions', {
     scope: (id: SessionId) => scopes.get(id)?.ctx,
     scopeOf: (c: Context) => scopeOf(c),
     subagentAddress: (id: SessionId) => id === opts.addressed
       ? { parentSessionId: sid('parent'), childSessionId: id, mode: 'continuable' as const }
       : undefined,
+    binding: (id: SessionId) => bindings.get(id),
   })
   const remote = Object.assign(new TestRemote(ctx), { commands: commandsRemote })
   ctx.provide('remote.commands', commandsRemote)
@@ -136,13 +152,28 @@ async function bench(opts: BenchOptions = {}) {
   const mint = (key: string) => {
     const handle = createScope(ctx, sid(key))
     scopes.set(sid(key), handle)
+    const id = sid(key)
+    bindings.set(id, {
+      session: {
+        beginSubmission: (input) => {
+          const record = {
+            sessionId: id,
+            text: input.text,
+            attachments: input.attachments.length,
+            abandoned: false,
+          }
+          submissions.push(record)
+          return { requestId: 'fake-request', abandon: () => { record.abandoned = true } }
+        },
+      },
+    })
     return handle
   }
   /** Warm one session's catalog through the source's own candidate pull. */
   const warm = async (session: ClientSessionContext) => {
     await source.candidates(session, { query: '', position: 'leading', drilled: false, signal: new AbortController().signal })
   }
-  return { ctx, fiber, command, source, mint, warm, listCalls, executeCalls, executions, registered, notices, remote }
+  return { ctx, fiber, command, source, mint, warm, listCalls, executeCalls, executions, registered, notices, remote, submissions }
 }
 
 function menuPick(source: InputTriggerSource, name: string, session: ClientSessionContext, end?: number) {
@@ -679,6 +710,50 @@ describe('execute payload', () => {
     expect(bad.kind).toBe('error')
     const second = await claimOf({ execute: () => Promise.resolve({ matched: true }) })
     await expect(second.submit('', new Context(), [])).resolves.toEqual({ kind: 'success' })
+  })
+
+  it('flips the blank → engaging edge like a prompt and retires the echo in the same tick', async () => {
+    const { source, mint, warm, submissions } = await bench({
+      execute: () => Promise.resolve({ matched: true }),
+    })
+    mint('s1')
+    await warm(proj('s1'))
+    const outcome = source.matchSpace!(proj('s1'), '/goal')
+    if (outcome === undefined || outcome === 'handled' || !('claim' in outcome)) throw new Error('expected claim')
+    await outcome.claim.submit('ship it', new Context(), [])
+    // The durable command nodes are the submission's visible outcome, so the
+    // submission must still drive the session out of the blank shell phase —
+    // but no durable user message will retire a command echo, so it leaves at
+    // once.
+    expect(submissions).toEqual([{
+      sessionId: sid('s1'),
+      text: '/goal ship it',
+      attachments: 0,
+      abandoned: true,
+    }])
+  })
+
+  it('a detached execute engages too; an unbound session skips the engagement edge', async () => {
+    const { source, mint, warm, submissions } = await bench({
+      execute: () => Promise.resolve({ matched: true }),
+    })
+    mint('s1')
+    await warm(proj('s1'))
+    menuPick(source, 'plan', proj('s1'), 5)
+    await vi.waitFor(() => {
+      expect(submissions).toEqual([{
+        sessionId: sid('s1'),
+        text: '/plan',
+        attachments: 0,
+        abandoned: true,
+      }])
+    })
+    // No binding minted for 'ghost': the engagement edge skips without failing.
+    await warm(proj('ghost'))
+    menuPick(source, 'plan', proj('ghost'), 5)
+    await vi.waitFor(() => {
+      expect(submissions).toHaveLength(1)
+    })
   })
 })
 
