@@ -405,3 +405,162 @@ The operation-local request types (`TowerSpawnRequest`, `TowerMessageRequest`, `
 ## The shipped provider
 
 [dsh-tower-local](../../packages/tower/tower-local/README.md) registers the `local` backend: one `.tower/` store per workspace git root (`workspace.json`, per-mission `missions/m-<n>.json`, and append-only `messages.jsonl`/`findings.jsonl`/`activity.jsonl`/`reviews/m-<n>.jsonl` journals, all zod-validated on read), git worktrees driven through the [subprocess seam](subprocess.md), and mission children run as [continuable subagents](subagent.md) with `cwd` bound to the mission worktree — the per-child working directory the start request carries. A single FIFO promise queue serializes storage transactions while subagent seam calls stay outside it, message delivery goes through the lead (a parent-inbox notice for `lead`, [adjacent-Agent messaging](subagent.md) for missions), and the model-facing authority of a mission child is its recorded mission ownership. The ten model-facing tools live in [dsh-tool-tower](../../packages/tower/tool-tower/README.md); `tower_merge` and `tower_teardown` ask the [approval seam](approval.md) before delegating. Configuration tables and model-experience contracts live in the package READMEs.
+
+<!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
+
+<a id="cordis-surface"></a>
+
+## Cordis API
+
+Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
+
+<a id="ctxtower--towerservice"></a>
+
+### `ctx.tower` — `TowerService`
+
+The tower capability published as `ctx.tower`. The service owns the logged mode, provider registry, and caller-authority validation; every operation delegates to the provider selected by Config once authority passes. The contract lives on the `./types` face so provider packages compile against contracts alone.
+
+Authority: `init`, `spawnMission`, `abortMission`, `recordReview`, `merge`, and `teardown` are lead-only — the caller's session must carry active tower mode. `status`, `sendMessage`, `inbox`, `recordFinding`, and `listFindings` additionally admit recorded mission owners.
+
+```ts cordis-catalog
+/**
+ * Register one backend under its {@link TowerProvider.name}. The
+ * registration is an owned effect: disposing the caller's fiber removes it.
+ * @param provider - the backend to publish.
+ */
+registerProvider(provider: TowerProvider): void
+
+/**
+ * Read the logged tower mode of `agent`'s session.
+ * @param agent - the session-owning Agent.
+ * @returns the committed mode and base.
+ */
+mode(agent: Agent): TowerModeState
+
+/**
+ * Create or adopt the caller's workspace (lead-only).
+ * @param caller - exact live lead Agent.
+ * @returns the workspace and adoption facts.
+ */
+init(caller: Agent): Promise<TowerWorkspaceInfo>
+
+/**
+ * Read the tower dashboard (lead or mission owner).
+ * @param caller - exact live lead or mission Agent.
+ * @returns the current dashboard.
+ */
+status(caller: Agent): Promise<TowerDashboard>
+
+/**
+ * Spawn one mission in an isolated worktree (lead-only); refuses loudly
+ * beyond the configured mission bound.
+ * @param caller - exact live lead Agent.
+ * @param request - title, complete task prompt, and caller cancellation.
+ * @returns the active mission row.
+ */
+spawnMission(caller: Agent, request: TowerSpawnRequest): Promise<TowerMissionView>
+
+/**
+ * Interrupt a mission's live child and mark it `aborted` (lead-only).
+ * @param caller - exact live lead Agent.
+ * @param id - the mission to abort.
+ * @returns the updated mission row.
+ */
+abortMission(caller: Agent, id: TowerMissionId): Promise<TowerMissionView>
+
+/**
+ * Record and deliver one lead-mediated message (lead or mission owner).
+ * @param caller - exact live lead or mission Agent.
+ * @param request - address, content, and pre-delivery cancellation.
+ * @returns the recorded message.
+ */
+sendMessage(caller: Agent, request: TowerMessageRequest): Promise<TowerMessage>
+
+/**
+ * Read the caller's inbox slice (lead or mission owner).
+ * @param caller - exact live lead or mission Agent.
+ * @param limit - maximum messages returned.
+ * @returns messages addressed to the caller, newest last.
+ */
+inbox(caller: Agent, limit?: number): Promise<TowerMessage[]>
+
+/**
+ * Persist one shared finding (lead or mission owner).
+ * @param caller - exact live lead or mission Agent.
+ * @param request - finding title and body.
+ * @returns the recorded finding.
+ */
+recordFinding(caller: Agent, request: TowerFindingRequest): Promise<TowerFinding>
+
+/**
+ * List every recorded finding (lead or mission owner).
+ * @param caller - exact live lead or mission Agent.
+ * @returns all findings in creation order.
+ */
+listFindings(caller: Agent): Promise<TowerFinding[]>
+
+/**
+ * Append one review round, stamping the mission's current branch tip
+ * (lead-only).
+ * @param caller - exact live lead Agent.
+ * @param request - mission, verdict, and review summary.
+ * @returns the recorded round.
+ */
+recordReview(caller: Agent, request: TowerReviewRequest): Promise<TowerReviewRound>
+
+/**
+ * Merge one approved mission branch into the base through the review gate
+ * (lead-only).
+ * @param caller - exact live lead Agent.
+ * @param id - the mission to merge.
+ * @returns the merged mission and its merge commit.
+ */
+merge(caller: Agent, id: TowerMissionId): Promise<TowerMergeResult>
+
+/**
+ * End the workspace's active work, keeping `.tower/` as the audit trail
+ * (lead-only).
+ * @param caller - exact live lead Agent.
+ * @param request - whether to remove dirty worktrees, and cancellation.
+ * @returns removal and interruption facts.
+ */
+teardown(caller: Agent, request: TowerTeardownRequest): Promise<TowerTeardownResult>
+
+/**
+ * Whether `session` owns an unmerged mission.
+ * @param session - the candidate session.
+ * @returns true when the session is a recorded mission owner.
+ */
+isMissionOwner(session: Session): Promise<boolean>
+```
+
+Types: [Agent](core.md) · [Session](session.md)
+
+Source: [`packages/tower/tower/src/types.ts`](../../packages/tower/tower/src/types.ts)
+
+<a id="tower-local-events"></a>
+
+### `tower-local/*` events
+
+<a id="tower-localactivity--emit"></a>
+
+#### `tower-local/activity` — emit
+
+One tower-local activity entry committed to the workspace journal. The dispatch is synchronous and runs before the recording operation returns, so a synchronous listener's throw reaches that operation; listeners must be synchronous, must tolerate stores they do not own, and must not call back into the emitting provider (its storage transaction is still open).
+
+```ts cordis-catalog
+/**
+ * One tower-local activity entry committed to the workspace journal. The
+ * dispatch is synchronous and runs before the recording operation
+ * returns, so a synchronous listener's throw reaches that operation;
+ * listeners must be synchronous, must tolerate stores they do not own,
+ * and must not call back into the emitting provider (its storage
+ * transaction is still open).
+ * @param notice - the store root, the committed entry, and the merged branch tip when any.
+ * @mode emit
+ */
+'tower-local/activity'(notice: TowerLocalActivityNotice): void
+```
+
+Source: [`packages/tower/tower-local/src/events.ts`](../../packages/tower/tower-local/src/events.ts)
+<!-- END GENERATED cordis-surface -->

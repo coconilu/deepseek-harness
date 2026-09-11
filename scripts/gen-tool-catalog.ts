@@ -62,6 +62,8 @@ import * as ToolTasks from '@deepseek-ai/dsh-tool-jobs'
 import type TeamService from '@deepseek-ai/dsh-experimental-agent-team'
 import * as ToolTeam from '@deepseek-ai/dsh-experimental-tool-agent-team'
 import * as ToolTodo from '@deepseek-ai/dsh-tool-todo'
+import * as ToolTower from '@deepseek-ai/dsh-tool-tower'
+import TowerService from '@deepseek-ai/dsh-tower'
 import * as ToolSubagent from '@deepseek-ai/dsh-tool-subagent'
 import { registerListSubagentModels } from '../packages/subagent/tool-subagent/src/list-models.ts'
 import * as ToolWeb from '@deepseek-ai/dsh-tool-web'
@@ -569,6 +571,22 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'todo_write is session-owned state; UIs render the latest todo/write event as a checklist. `allowParallelInProgress` is required with no default, so the catalog states its choice: `true`, whose description invites several `in_progress` items. A deployment choosing `false` receives the same tool with a description asking for exactly one active task.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-tool-tower',
+    dir: 'tool-tower',
+    source: 'packages/tower/tool-tower/src/index.ts',
+    requires: ['ctx.tools', 'ctx.tower', 'ctx.systemPrompt', 'ctx.approval at execution time for tower_merge/tower_teardown (optional, fails closed)'],
+    writes: ['tool/call', 'tool/result', 'tower workspace journals through ctx.tower (missions, messages, findings, reviews, activity)'],
+    async mount(ctx) {
+      // The tower tools inject `ctx.tower`; the Service Definition alone is
+      // enough because registration never delegates — provider lookup and
+      // caller-authority validation run at execution time.
+      await ctx.plugin(TowerService, { section: 'Tool catalog schema harvest.' })
+      await ctx.plugin(ToolTower)
+    },
+    note:
+      'Lead-only tools refuse without active tower mode on the calling session; the comms set (tower_status, tower_send, tower_inbox, tower_finding) also admits the recorded owner of an unmerged mission. tower_merge and tower_teardown additionally ask the approval seam before delegating (its absence fails closed). Mission children compose MISSION_TOOL_FILTER from this package so the lead-only names never reach their model.',
   },
   {
     pkg: '@deepseek-ai/dsh-tool-workflow',

@@ -306,6 +306,9 @@ function declForTypeName(world: World, ctx: FileCtx, name: string): { decl: Type
 /** Utility wrappers that pass a member lookup through to their type argument. */
 const PASSTHROUGH_WRAPPERS = new Set(['Partial', 'Required', 'Readonly', 'NonNullable'])
 
+/** Schema builder methods that declare a fixed key set the walk can enumerate. */
+const OBJECT_METHODS = new Set(['object', 'strictObject'])
+
 /**
  * Walk a schema key path against a declared type. This is a PRESENCE check,
  * not a runtime value check: it answers "does the declared config type have a member
@@ -413,8 +416,9 @@ function unwrapExpr(expr: ts.Expression): ts.Expression {
  * Statically walk a schemastery schema expression to its key paths plus the
  * packages whose schemas an intersect composes. A key path is the top-level
  * key or a nested path through object/array compositions (`agents[].id`).
- * Handles the declaration forms the repo uses — `z.object({…})` (possibly behind
- * chained calls) and `z.intersect([X.Config, …])` — and hard-errors on
+ * Handles the declaration forms the repo uses — `z.object({…})` and
+ * `z.strictObject({…})` (possibly behind chained calls) and
+ * `z.intersect([X.Config, …])` — and hard-errors on
  * anything else, so a schema the walk cannot see fails the gate instead of
  * silently thinning it. Nested values that are neither `object` nor `array`
  * compositions (primitives, unions, dynamic-key dicts) contribute no paths.
@@ -433,7 +437,7 @@ function walkSchemaExpr(
     const call = unwrapExpr(value)
     if (!ts.isCallExpression(call) || !ts.isPropertyAccessExpression(call.expression)) return
     const method = call.expression.name.text
-    if (method === 'object' && call.arguments[0] && ts.isObjectLiteralExpression(call.arguments[0])) {
+    if (OBJECT_METHODS.has(method) && call.arguments[0] && ts.isObjectLiteralExpression(call.arguments[0])) {
       for (const prop of call.arguments[0].properties) {
         if (!ts.isPropertyAssignment(prop)) continue
         const key = ts.isStringLiteral(prop.name) ? prop.name.text : prop.name.getText(ctx.sf)
@@ -456,7 +460,7 @@ function walkSchemaExpr(
       return
     }
     const method = call.expression.name.text
-    if (method === 'object' && call.arguments[0] && ts.isObjectLiteralExpression(call.arguments[0])) {
+    if (OBJECT_METHODS.has(method) && call.arguments[0] && ts.isObjectLiteralExpression(call.arguments[0])) {
       for (const prop of call.arguments[0].properties) {
         if (ts.isPropertyAssignment(prop) || ts.isShorthandPropertyAssignment(prop)) {
           const key = ts.isStringLiteral(prop.name) ? prop.name.text : prop.name.getText(ctx.sf)
