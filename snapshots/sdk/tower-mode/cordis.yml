@@ -1,0 +1,33 @@
+# Tower-mode SDK composition for the tower-mode snapshot. The sdk profile owns
+# application startup and the JSON-RPC server; this overlay mounts the
+# scenario-local driver that emits the tower/mode session event inside the
+# first turn, keeps the session log uncompressed for the snapshot harvest, and
+# pins the POSIX shell tool so the advertised tool schemas are identical on
+# every platform. The event's real command-driven emission, the tower:policy
+# prompt section, and the git-backed mission lifecycle belong to the headless
+# tower-merge-flow scenario; this scenario pins the SDK notification wire face
+# of the event without composing bare tower package rows, whose module-fallback
+# resolution differs between the source and built runtime launches.
+
+- id: session-persistence-jsonl
+  name: '@deepseek-ai/dsh-session-persistence-jsonl'
+  config:
+    root: !!js dshHomePath('sessions')
+    compression: none
+
+- id: tool-pwsh
+  disabled: true
+
+- id: tool-bash
+  disabled: false
+
+- id: system-prompt
+  config:
+    includeRuntimeContext: false
+    personaSuffix: Your working directory is {{cwd}}.
+    personaPrefix: >-
+      You are a coding agent powered by the {{model}} model.
+
+- insert:
+    - id: tower-mode-fixture
+      name: './tower-mode-driver.mjs'

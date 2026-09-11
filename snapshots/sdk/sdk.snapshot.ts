@@ -340,9 +340,13 @@ async function fixtureFiles(scenario: CorpusScenario): Promise<string[]> {
 async function hydrateReplayFixtures(scenario: CorpusScenario, cwd: string): Promise<string[]> {
   const root = join(cwd, '.replay-fixtures')
   await mkdir(root, { recursive: true })
+  // JSON-safe substitution: the token sits inside JSON string values, so a
+  // Windows cwd's backslashes must be escaped or the hydrated line stops
+  // being valid JSON.
+  const hydratedCwd = cwd.replaceAll('\\', '\\\\')
   return Promise.all((await fixtureFiles(scenario)).map(async (source) => {
     const destination = join(root, basename(source))
-    await writeFile(destination, (await readFile(source, 'utf8')).replaceAll('{{cwd}}', cwd))
+    await writeFile(destination, (await readFile(source, 'utf8')).replaceAll('{{cwd}}', hydratedCwd))
     return destination
   }))
 }
