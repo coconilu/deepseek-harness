@@ -70,7 +70,7 @@ export const Config: z<Config> = z.object({
  * through the mission child's start `toolFilter`; the tools' own authority
  * gate remains the second line of defense when the filter is absent.
  */
-export const MISSION_TOOL_FILTER: ToolRestriction = {
+export const MISSION_TOOL_FILTER: ToolRestriction & { readonly deny: string[] } = {
   deny: ['tower_init', 'tower_spawn', 'tower_mission', 'tower_review', 'tower_merge', 'tower_teardown'],
 }
 

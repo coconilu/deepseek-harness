@@ -60,7 +60,6 @@ declare module '@deepseek-ai/dsh-session/types' {
      * Whether tower mode is in force from this point on: log-only, non-surface,
      * whole-value replace. The last `tower/mode` wins; a log with none folds to
      * inactive through the projection unit's fold.
-     * @mode emit
      * @param payload - the committed mode; `base` records the base branch of an activation and is absent on deactivation.
      */
     'tower/mode': { active: boolean; base?: string }
