@@ -1,6 +1,7 @@
 # Keyless replay counterpart to the tower-mode SDK recording overlay: the
-# tower rows from cordis.yml stay mounted; only the model adapter is replaced
-# by replay, whose script derives from the committed session fixture.
+# composition matches cordis.yml (scenario driver, no tower service rows);
+# only the model adapter is replaced by replay, whose script derives from the
+# committed session fixture.
 
 - id: llm-deepseek
   name: '@deepseek-ai/dsh-llm-deepseek'
