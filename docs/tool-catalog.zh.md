@@ -43,6 +43,7 @@
 | `@deepseek-ai/dsh-tool-jobs` | `job_kill`、`job_list`、`job_output` | `ctx.tools`、`ctx.jobs`、`ctx.systemPrompt` | `tool/call`、`tool/result`、`user/message via agent.inject() for background completion notices` | - | 与任务种类无关的后台任务控制器：后台 bash 命令、PTY 发送和 subagent 都通过相同的 3 个工具读取、列出和终止。加载该插件会挂接控制器，从而启用生产方的 `ctx.jobs.start()`。 |
 | `@deepseek-ai/dsh-experimental-tool-agent-team` | `interrupt_agent`、`list_agents`、`send_message`、`spawn_teammate`、`team_task_create`、`team_task_get`、`team_task_list`、`team_task_update`、`wait_agent` | `ctx.tools`、`ctx.systemPrompt`、`ctx.agentTeams`、`an exact live Team member Agent` | `tool/call`、`team/member`、`team/message/queued`、`team/message/delivered`、`team/task`、`tool/result` | - | 这 9 个工具限定于隐式 Team Lead 与持久 teammate 作用域。随产品发布的 dsh-base bundle 默认禁用该包；文档中的 Agent Teams profile patch 会启用它，并禁用旧 continuable child 的同名控制工具。 |
 | `@deepseek-ai/dsh-tool-todo` | `todo_write` | `ctx.tools`、`owning Agent session` | `tool/call`、`todo/write`、`tool/result` | - | todo_write 是会话所有的状态；UI 将最新的 todo/write 事件渲染为检查清单。`allowParallelInProgress` 是没有默认值的必填项，因此本目录明确选择 `true`，对应描述允许同时存在多个 `in_progress` 项。选择 `false` 的部署会获得同一工具，但描述会要求只能有 1 个活动任务。 |
+| `@deepseek-ai/dsh-tool-tower` | `tower_finding`、`tower_inbox`、`tower_init`、`tower_merge`、`tower_mission`、`tower_review`、`tower_send`、`tower_spawn`、`tower_status`、`tower_teardown` | `ctx.tools`、`ctx.tower`、`ctx.systemPrompt`、`ctx.approval at execution time for tower_merge/tower_teardown (optional, fails closed)` | `tool/call`、`tool/result`、`tower workspace journals through ctx.tower (missions, messages, findings, reviews, activity)` | - | 仅 lead 可用的工具在调用会话没有激活 tower 模式时拒绝执行；comms 集合（tower_status、tower_send、tower_inbox、tower_finding）也接受未合并 mission 的被记录拥有者。tower_merge 与 tower_teardown 在委托前额外征询审批接缝（缺失时 fail closed）。mission 子代理会组合本包的 MISSION_TOOL_FILTER，使仅 lead 可用的工具名永远不会到达其模型。 |
 | `@deepseek-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`、`ctx.workflowEngine`、`ctx.systemPrompt`、`a calling Agent (exec.agent parents the script children)` | `tool/call`、`tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-web` | `web_fetch`、`web_search` | `ctx.tools`、`ctx.web`、`ctx.systemPrompt` | `tool/call`、`tool/result` | - | web_search 和 web_fetch 将提供方选择置于 ctx.web 之后，使模型可见 schema 在更换后端时保持稳定。 |
 
@@ -2128,6 +2129,244 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 来源：[`packages/todo/tool-todo/src/index.ts`](../packages/todo/tool-todo/src/index.ts)
 
 todo_write 是会话所有的状态；UI 将最新的 todo/write 事件渲染为检查清单。`allowParallelInProgress` 是没有默认值的必填项，因此本目录明确选择 `true`，对应描述允许同时存在多个 `in_progress` 项。选择 `false` 的部署会获得同一工具，但描述会要求只能有 1 个活动任务。
+
+<a id="deepseek-aidsh-tool-tower"></a>
+
+## `@deepseek-ai/dsh-tool-tower`
+
+### `tower_finding`
+
+记录一条所有 tower 参与者都可读的共享 finding，或列出迄今为止已记录的 finding。对 lead 与 mission 会话开放。每当了解到其他参与者需要的东西——一个阻塞、一个发现的契约、一个共享决策——就记录一条 finding。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "action": {
+      "type": "string",
+      "description": "record stores a new finding; list returns every finding.",
+      "enum": [
+        "record",
+        "list"
+      ]
+    },
+    "title": {
+      "type": "string",
+      "description": "Short finding title. Required for record."
+    },
+    "body": {
+      "type": "string",
+      "description": "The complete finding detail. Required for record."
+    }
+  },
+  "required": [
+    "action"
+  ]
+}
+```
+
+来源：[`packages/tower/tool-tower/src/index.ts`](../packages/tower/tool-tower/src/index.ts)
+
+### `tower_inbox`
+
+读取发到本会话的消息（包含 "all" 广播），最新的在后。对 lead 与 mission 会话开放。省略 `limit` 时结果有界。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "limit": {
+      "type": "integer",
+      "description": "Maximum messages to read, taken from the newest. Defaults to the deployment bound."
+    }
+  }
+}
+```
+
+来源：[`packages/tower/tool-tower/src/index.ts`](../packages/tower/tool-tower/src/index.ts)
+
+### `tower_init`
+
+在调用会话的 git 根创建（或收编）本工作区的 tower：记录 base 分支与 .tower/ 协调存储。进入 tower 模式后调用一次；重复执行会收编既有工作区并报告带过了多少未合并 mission。仅 lead 可用。
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+来源：[`packages/tower/tool-tower/src/index.ts`](../packages/tower/tool-tower/src/index.ts)
+
+### `tower_merge`
+
+将一个已 APPROVED 的 mission 分支合并回被记录的 base（base 上落一个 merge commit，mission worktree 被移除）。仅 lead 可用；合并前征询用户批准。mission 必须已 approved，且最新一轮批准记录的 commit 仍等于其分支 tip。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "mission_id": {
+      "type": "string",
+      "description": "The mission id, like m-3."
+    }
+  },
+  "required": [
+    "mission_id"
+  ]
+}
+```
+
+来源：[`packages/tower/tool-tower/src/index.ts`](../packages/tower/tool-tower/src/index.ts)
+
+### `tower_mission`
+
+控制一个 mission。仅 lead 可用。action "abort" 中断 mission 的在跑子代理（其收件箱保留）并将 mission 标记为 aborted；分支与 worktree 保留供检查。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "mission_id": {
+      "type": "string",
+      "description": "The mission id, like m-3."
+    },
+    "action": {
+      "type": "string",
+      "description": "The control operation to apply.",
+      "enum": [
+        "abort"
+      ]
+    }
+  },
+  "required": [
+    "mission_id",
+    "action"
+  ]
+}
+```
+
+来源：[`packages/tower/tool-tower/src/index.ts`](../packages/tower/tool-tower/src/index.ts)
+
+### `tower_review`
+
+在一个 mission 分支上记录一轮评审，盖戳其当前 tip commit。仅 lead 可用。verdict "approve" 将 mission 标记为 approved（只有 approved 的 mission 可以合并）；"reject" 将其退回 active 以便返工。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "mission_id": {
+      "type": "string",
+      "description": "The mission id, like m-3."
+    },
+    "verdict": {
+      "type": "string",
+      "description": "The review verdict.",
+      "enum": [
+        "approve",
+        "reject"
+      ]
+    },
+    "summary": {
+      "type": "string",
+      "description": "Review summary: what was examined and why the verdict holds."
+    }
+  },
+  "required": [
+    "mission_id",
+    "verdict",
+    "summary"
+  ]
+}
+```
+
+来源：[`packages/tower/tool-tower/src/index.ts`](../packages/tower/tool-tower/src/index.ts)
+
+### `tower_send`
+
+经 tower 发送一条消息：`to` 是 "lead"、某个 mission id 或 "all"（除发送者外的所有在跑 mission）。对 lead 与 mission 会话开放。lead 不能给自己发消息。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "to": {
+      "type": "string",
+      "description": "\"lead\", one mission id, or \"all\"."
+    },
+    "content": {
+      "type": "string",
+      "description": "Self-contained message text for the receiver."
+    }
+  },
+  "required": [
+    "to",
+    "content"
+  ]
+}
+```
+
+来源：[`packages/tower/tool-tower/src/index.ts`](../packages/tower/tool-tower/src/index.ts)
+
+### `tower_spawn`
+
+创建一个 mission：把被记录的 base 分支 fork 成隔离的 git worktree，并在其中启动 mission 子代理。仅 lead 可用。子代理只看到 `prompt` 加上后续 tower 消息——把完整的任务、上下文、约束与完成定义都写进它。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Short mission title for dashboards and activity entries."
+    },
+    "prompt": {
+      "type": "string",
+      "description": "The COMPLETE task text the mission child receives."
+    }
+  },
+  "required": [
+    "title",
+    "prompt"
+  ]
+}
+```
+
+来源：[`packages/tower/tool-tower/src/index.ts`](../packages/tower/tool-tower/src/index.ts)
+
+### `tower_status`
+
+读取 tower 仪表盘：每个未合并 mission 及其状态、拥有者存活情况和评审门状态，外加 finding 计数与最近 activity 尾部。在决定 spawn、评审、合并或 teardown 之前先使用它。对 lead 与 mission 会话开放。
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+来源：[`packages/tower/tool-tower/src/index.ts`](../packages/tower/tool-tower/src/index.ts)
+
+### `tower_teardown`
+
+结束工作区进行中的 tower 工作：中断在跑的 mission 子代理、移除 mission worktree（脏 worktree 默认保留并报告，除非 force），并把 .tower/ 记录原地保留作为审计轨迹。仅 lead 可用；先征询用户批准。tower 模式本身保持开启。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "force": {
+      "type": "boolean",
+      "description": "Remove dirty worktrees too. Defaults to false (dirty worktrees are kept and reported)."
+    }
+  }
+}
+```
+
+来源：[`packages/tower/tool-tower/src/index.ts`](../packages/tower/tool-tower/src/index.ts)
+
+仅 lead 可用的工具在调用会话没有激活 tower 模式时拒绝执行；comms 集合（tower_status、tower_send、tower_inbox、tower_finding）也接受未合并 mission 的被记录拥有者。tower_merge 与 tower_teardown 在委托前额外征询审批接缝（缺失时 fail closed）。mission 子代理会组合本包的 MISSION_TOOL_FILTER，使仅 lead 可用的工具名永远不会到达其模型。
 
 <a id="deepseek-aidsh-tool-workflow"></a>
 

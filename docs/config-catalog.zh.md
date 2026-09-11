@@ -2609,7 +2609,7 @@ export interface Config {
 }
 ```
 
-来源：[`packages/core/system-prompt/src/index.ts:242`](../packages/core/system-prompt/src/index.ts)
+来源：[`packages/core/system-prompt/src/index.ts:243`](../packages/core/system-prompt/src/index.ts)
 
 <a id="deepseek-aidsh-terminal-bash"></a>
 
@@ -3111,6 +3111,26 @@ export interface Config {
 
 来源：[`packages/todo/tool-todo/src/index.ts:29`](../packages/todo/tool-todo/src/index.ts)
 
+<a id="deepseek-aidsh-tool-tower"></a>
+
+## `@deepseek-ai/dsh-tool-tower`
+
+需要：`tower` · `tools`
+
+```ts config-catalog
+/** Model-facing tower tool configuration. */
+export interface Config {
+  /**
+   * Message bound for `tower_inbox`: the cap applied when the model omits
+   * `limit`, and the ceiling every explicit limit clamps to. An unbounded
+   * journal read would spend model context without bound.
+   */
+  readonly maxInbox: number
+}
+```
+
+来源：[`packages/tower/tool-tower/src/index.ts:52`](../packages/tower/tool-tower/src/index.ts)
+
 <a id="deepseek-aidsh-tool-web"></a>
 
 ## `@deepseek-ai/dsh-tool-web`
@@ -3192,6 +3212,49 @@ export type ToolPresentationMode = 'native' | 'ptc' | 'both'
 ```
 
 来源：[`packages/core/tools/src/index.ts:647`](../packages/core/tools/src/index.ts)
+
+<a id="deepseek-aidsh-tower"></a>
+
+## `@deepseek-ai/dsh-tower`
+
+需要：`systemPrompt` · `sessionProjections`
+
+```ts config-catalog
+/** Tower service plugin config: deployment-owned policy text and provider selection. */
+export interface Config {
+  /** Policy rendered as the `tower:policy` prompt section while tower mode is active. */
+  section: string
+  /** Registry name of the {@link TowerProvider} the facade delegates to (default `local`). */
+  provider?: string
+  /** Maximum unmerged missions per workspace, enforced in `spawnMission` (default 8). */
+  maxMissions?: number
+}
+```
+
+来源：[`packages/tower/tower/src/index.ts:82`](../packages/tower/tower/src/index.ts)
+
+<a id="deepseek-aidsh-tower-local"></a>
+
+## `@deepseek-ai/dsh-tower-local`
+
+需要：`tower` · `subagents` · `subprocess`
+
+```ts config-catalog
+/** Plugin config: mission child composition and dashboard bounds. */
+export interface Config {
+  /** `ctx.subagents` provider name composing mission children (default `spawn`). */
+  childProvider: string
+  /**
+   * Tool names denied from every mission child's tool set (default none). An
+   * unknown or reserved name fails the mission child's start loudly.
+   */
+  childToolFilter: readonly string[]
+  /** Maximum activity entries one `status` dashboard returns (default 50). */
+  activityTail: number
+}
+```
+
+来源：[`packages/tower/tower-local/src/index.ts:22`](../packages/tower/tower-local/src/index.ts)
 
 <a id="deepseek-aidsh-typert-loader"></a>
 
@@ -3595,6 +3658,7 @@ export interface Config {
 - `@deepseek-ai/dsh-session-title-llm`（[`packages/session/session-title-llm/src/index.ts`](../packages/session/session-title-llm/src/index.ts)）
 - `@deepseek-ai/dsh-subagent-in-process-driver`（[`packages/subagent/subagent-in-process-driver/src/index.ts`](../packages/subagent/subagent-in-process-driver/src/index.ts)）
 - `@deepseek-ai/dsh-timeout`（[`packages/util/timeout/src/index.ts`](../packages/util/timeout/src/index.ts)）
+- `@deepseek-ai/dsh-tower-profile`（[`packages/bundle/tower/src/index.ts`](../packages/bundle/tower/src/index.ts)）
 - `@deepseek-ai/dsh-typert-generator`（[`packages/typert/generator/src/index.ts`](../packages/typert/generator/src/index.ts)）
 - `@deepseek-ai/dsh-typert-protocol`（[`packages/typert/protocol/src/index.ts`](../packages/typert/protocol/src/index.ts)）
 - `@deepseek-ai/dsh-typert-registry`（[`packages/typert/registry/src/index.ts`](../packages/typert/registry/src/index.ts)）
