@@ -1,0 +1,8 @@
+version: 1
+scenario: tower-mode
+profile: sdk
+composition: sdk-tower
+recording: authored
+header:
+  class: sdk-tower
+  pin: true

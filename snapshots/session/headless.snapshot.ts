@@ -62,6 +62,13 @@ const editingCordisSkill = join(
   'packages/preset/agent-presets/presets/cordis/skills/editing-cordis-compositions/SKILL.md',
 )
 
+/** Pinned git committer date for the tower scenarios' deterministic commit hashes. */
+const TOWER_FIXTURE_GIT_DATE = '2026-09-11T00:00:00+00:00'
+/** Pinned git identity for the tower scenarios' deterministic commit hashes. */
+const TOWER_FIXTURE_GIT_IDENTITY = 'Tower Snapshot Fixture'
+/** Pinned git email for the tower scenarios' deterministic commit hashes. */
+const TOWER_FIXTURE_GIT_EMAIL = 'tower-snapshot@example.invalid'
+
 type SnapshotMode = 'replay' | 'record' | 'refresh'
 
 function snapshotMode(value: string | undefined): SnapshotMode {
@@ -76,7 +83,10 @@ function snapshotMode(value: string | undefined): SnapshotMode {
 }
 
 const mode = snapshotMode(process.env.DSH_SNAPSHOT)
-const RUNTIME_WORKSPACE_ENTRIES = ['.agents', '.dsh', '.snapshot-patches'] as const
+// `.git` and `.tower` hold per-run git object databases, worktree admin, and
+// the tower coordination store; the scenario fixtures own their user-visible
+// workspace facts instead.
+const RUNTIME_WORKSPACE_ENTRIES = ['.agents', '.dsh', '.git', '.snapshot-patches', '.tower'] as const
 
 interface JsonObject {
   [key: string]: unknown
@@ -491,6 +501,37 @@ const workspaceSetups: Record<string, (cwd: string) => Promise<void>> = {
       const mtime = new Date(2000, 0, 1, 0, 0, 0, index + 1)
       await utimes(target, mtime, mtime)
     }
+  },
+
+  /**
+   * Deterministic one-commit git repository for the tower scenarios. The
+   * pinned dates and identity match the scenario's `snapshot.yml` environment
+   * so mission and merge commits reproduce the same hashes every run.
+   */
+  async 'tower-git-fixture'(cwd) {
+    const gitEnv = {
+      ...process.env,
+      GIT_CONFIG_NOSYSTEM: '1',
+      GIT_CONFIG_GLOBAL: '/dev/null',
+      GIT_AUTHOR_DATE: TOWER_FIXTURE_GIT_DATE,
+      GIT_COMMITTER_DATE: TOWER_FIXTURE_GIT_DATE,
+      GIT_AUTHOR_NAME: TOWER_FIXTURE_GIT_IDENTITY,
+      GIT_AUTHOR_EMAIL: TOWER_FIXTURE_GIT_EMAIL,
+      GIT_COMMITTER_NAME: TOWER_FIXTURE_GIT_IDENTITY,
+      GIT_COMMITTER_EMAIL: TOWER_FIXTURE_GIT_EMAIL,
+    }
+    const git = (args: string[]): void => {
+      const result = spawnSync('git', args, { cwd, env: gitEnv, encoding: 'utf8' })
+      if (result.status !== 0) throw new Error(`tower git fixture: git ${args.join(' ')} failed: ${result.stderr}`)
+    }
+    git(['init', '-b', 'main'])
+    git(['config', 'user.name', TOWER_FIXTURE_GIT_IDENTITY])
+    git(['config', 'user.email', TOWER_FIXTURE_GIT_EMAIL])
+    git(['config', 'commit.gpgsign', 'false'])
+    git(['config', 'core.autocrlf', 'false'])
+    git(['config', 'gc.auto', '0'])
+    git(['add', 'README.md'])
+    git(['commit', '-m', 'Initial commit'])
   },
 }
 

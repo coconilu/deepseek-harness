@@ -1,0 +1,60 @@
+# Keyless replay counterpart to the tower-merge-flow recording overlay: the
+# tower composition matches cordis.yml (including the pinned POSIX shell tool
+# name); only the model adapter is replaced by replay, whose script derives
+# from the committed session fixtures.
+
+- id: llm-deepseek
+  name: '@deepseek-ai/dsh-llm-deepseek'
+  disabled: true
+
+- id: tool-pwsh
+  disabled: true
+
+- id: tool-bash
+  disabled: false
+
+- id: system-prompt
+  config:
+    includeRuntimeContext: false
+    personaPrefix: |
+      You are a coding assistant powered by the {{model}} model. Your working directory is {{cwd}}. Your bash tool runs under a file sandbox — a `[sandbox: file access denied …]` result is policy, not a command bug.
+
+      Verify your work by running the code or tests. Keep answers brief and factual.
+
+- insert:
+    - id: llm-replay
+      name: '@deepseek-ai/dsh-llm-replay'
+      config:
+        providers:
+          - id: deepseek-official
+            name: DeepSeek
+            models:
+              - id: deepseek-v4-flash
+              - id: deepseek-v4-pro
+
+    - id: tower
+      name: '@deepseek-ai/dsh-tower'
+      config:
+        section: >-
+          Tower mode is active: you are the lead. Use the tower_* tools to fan work
+          out instead of doing everything in one session. Call tower_init once to
+          create or adopt the tower at the calling session's git root; it records the
+          base branch and the .tower/ coordination store. Split the work into missions
+          with tower_spawn: each mission runs in its own git worktree branched from
+          the base, driven by a child agent, so the mission prompt must be
+          self-contained. Monitor with tower_status, exchange context with tower_send
+          and tower_inbox, and record shared discoveries with tower_finding. A mission
+          lands only through the review gate: record a review round with tower_review,
+          and call tower_merge only after an approve verdict covers the mission's
+          current commit. Use tower_mission to abort a mission; tower_teardown ends
+          the workspace's active work. tower_merge and tower_teardown ask the user for
+          approval first: any other outcome means nothing happened, so never retry
+          without the user's explicit approval.
+        provider: tower-fixture
+        maxMissions: 8
+
+    - id: tool-tower
+      name: '@deepseek-ai/dsh-tool-tower'
+
+    - id: tower-fixture
+      name: './tower-fixture.mjs'
