@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-11-tower-capability.md
+2026-09-11-tower-capability.md: 913d9e79cd8fc8fa7f5054c001b3835115941609
+2026-09-11-tower-capability.zh.md: 2617c535a92cfc7b7e2fdc60a81403e8c972a36c

@@ -132,7 +132,7 @@ Session 消费方只了解当前逻辑格式。仅 header 的 `stat` 与 `list` 
 
 seam 正是替换一个提供方就能改变整个产品的原因。文件系统与进程提供方共享同一个执行世界，因此把它们指向远程沙箱，也就把 Bash、PTY 和 LSP 一并搬了过去，无需提供方专用 fork。[subagent 提供方](subsystems/subagent.zh.md)在同一个接口之后同样千差万别，从新建一个子 agent，到把一个轮次委派给另一个产品。
 
-[实验性 Agent Teams](subsystems/agent-team.zh.md) 是 `ctx.agentTeams` 上公开发布、显式启用的协作 seam，在可继续 subagent 之上提供持久 roster、任务板和 mailbox。
+两个显式启用的协作 seam 叠在可继续 subagent 之上：`ctx.agentTeams` 上的 [Agent Teams](subsystems/agent-team.zh.md)（roster、任务板、mailbox）与 `ctx.tower` 上的 [tower 模式](subsystems/tower.zh.md)（mission worktree 从 lead 分派出去，再经评审门禁合并回来）。
 
 ## 新行为的归属位置
 
@@ -146,6 +146,7 @@ seam 正是替换一个提供方就能改变整个产品的原因。文件系统
 | 添加 shell 执行 | 注册 `ctx.shell` 后端；本地后端通过 `ctx.subprocess` spawn 进程 |
 | 添加持久化终端执行 | 注册 `ctx.terminals` 后端和 `dsh-tool-terminal` |
 | 添加用户命令 | 在 `ctx.commands` 上注册；它无需模型轮次即可分派 |
+| 把 mission 分派到 worktree | 打开 tower 模式；`tower_*` 工具负责分派、评审与合并 |
 | 添加后台工作 | 在 `ctx.jobs` 上注册；`job_*` 工具负责收集或停止 |
 | 从外部 webhook 启动 Session | 在 `ctx.webhookRuntime` 上注册可信规则，并挂载提供方适配器 |
 | 添加文件系统访问或策略 | 注册 `ctx.fs` 提供方，或监听 `fs/*` 事件 |
