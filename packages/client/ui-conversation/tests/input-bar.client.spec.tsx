@@ -61,6 +61,8 @@ interface BenchOptions {
   /** Hot text-ref lexicon (injects a minimal slash stub exposing only lexicon()). */
   lexicon?: ReadonlyMap<'/' | '@', readonly string[]>
   permissions?: { options: { value: string; name: string; description?: string }[]; currentValue: string }
+  /** The `tower` projection value the standard-kit useProjection serves. */
+  tower?: { active: boolean; pending: boolean; base?: string }
   /** The `imageLimits` projection value (absent = no attachment service). */
   imageLimits?: {
     maxImageBytes: number
@@ -183,7 +185,8 @@ function bench(over?: BenchOptions) {
         ? over?.permissions
         : key === 'plan' ? over?.plan
           : key === 'goal' ? over?.goal
-            : key === 'imageLimits' ? over?.imageLimits : undefined)),
+            : key === 'imageLimits' ? over?.imageLimits
+              : key === 'tower' ? over?.tower : undefined)),
     useInput: bindSnapshotSelector(shell.state),
     inputActions: shell.actions,
     keyboard: shell,
@@ -1507,6 +1510,35 @@ describe('command launcher chrome and control seats', () => {
     ])
     expect(view.queryByLabelText('Plan mode')).toBeNull()
     expect(view.queryByLabelText('Model')).toBeNull()
+  })
+
+  it('the Tower chip is absent without the tower projection and while the mode is off', () => {
+    // Capability absent (no tower unit) and folded-off both leave the seat empty.
+    expect(bench().view.container.querySelector('[data-composer-tower]')).toBeNull()
+    const off = bench({ tower: { active: false, pending: false } })
+    expect(off.view.container.querySelector('[data-composer-tower]')).toBeNull()
+  })
+
+  it('the Tower chip follows the projection effective target: an in-flight /tower on already shows, a leaving selection already hides', () => {
+    const entering = bench({ tower: { active: false, pending: true } })
+    expect(entering.view.container.querySelector('[data-composer-tower]')).not.toBeNull()
+    const leaving = bench({ tower: { active: true, pending: true } })
+    expect(leaving.view.container.querySelector('[data-composer-tower]')).toBeNull()
+  })
+
+  it('the Tower chip renders the mode label with the base branch and a localized tooltip', () => {
+    const { view } = bench({ tower: { active: true, pending: false, base: 'master' } })
+    const chip = view.container.querySelector<HTMLElement>('[data-composer-tower]')!
+    expect(chip.textContent).toBe('Tower·master')
+    expect(chip.getAttribute('title')).toBe('Tower 模式已开启，基准分支 master')
+    expect(chip.querySelector('svg')).not.toBeNull()
+  })
+
+  it('the Tower chip renders without a base segment and keeps the plain tooltip', () => {
+    const { view } = bench({ tower: { active: true, pending: false } })
+    const chip = view.container.querySelector<HTMLElement>('[data-composer-tower]')!
+    expect(chip.textContent).toBe('Tower')
+    expect(chip.getAttribute('title')).toBe('Tower 模式已开启')
   })
 
   it('passes the textarea selection to the command menu launcher and reflects its expanded state', () => {

@@ -83,7 +83,9 @@ The service validates the caller before every operation: `init`, `spawnMission`,
 | File | Role |
 |---|---|
 | [`src/index.ts`](src/index.ts) | Plugin entry: `Config` schema, the `ctx.tower` facade, `tower:policy` section, `/tower` command, projection registration |
-| [`src/types.ts`](src/types.ts) | The provider and workspace vocabulary, the `tower` projection types, and the `ctx.tower` declaration |
+| [`src/types.ts`](src/types.ts) | The provider and workspace vocabulary, the `tower` service contract and `ctx.tower` declaration, re-exporting the projection leaf |
+| [`src/projection.ts`](src/projection.ts) | The `tower` projection types and projection-key declarations — the leaf the `./client` face serves to client carriers |
+| [`src/client.ts`](src/client.ts) | Client type face: re-exports the projection leaf, keeping the host `ctx.tower` merge out of client programs (types-only) |
 | — | No runtime invariant companion is published: the mode has a single authority — the session log — and the projection fold is pinned by tests, so no second observation can diverge from it. |
 
 </details>

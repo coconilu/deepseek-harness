@@ -24,6 +24,8 @@ import {
 import type {} from '@deepseek-ai/dsh-plan-mode/client'
 // Type-only: the `goal` projection key merge (hint disambiguation).
 import type {} from '@deepseek-ai/dsh-goal/client'
+// Type-only: the `tower` projection key merge (the modes row's Tower chip).
+import type {} from '@deepseek-ai/dsh-tower/client'
 // The `imageLimits` projection key merge (intake pre-check) arrives with the
 // wire types: apiproxy's sessions contract declares it, and client-runtime's
 // api-remotes import already places it in every client program.
@@ -36,6 +38,7 @@ import { resolveSubmitMode } from '../input/submission-policy.ts'
 import { attachmentErrorText, imageSizeText } from '../image-labels.ts'
 import { ContextMeter } from './ContextMeter.tsx'
 import { PermissionSelect } from './PermissionSelect.tsx'
+import { TowerChip } from './TowerChip.tsx'
 import css from './InputBar.module.css'
 
 export type InputBarProps = ComposerBarProps
@@ -116,6 +119,9 @@ export const InputBar = memo(function InputBar({
   // The Access seat's data: the host-computed permissions projection
   // (undefined = capability absent → the chip renders nothing).
   const permissions = useProjection('permissions')
+  // The Tower status seat's data: the host-folded tower projection
+  // (undefined = tower capability absent → the chip renders nothing).
+  const tower = useProjection('tower')
 
   // A continuable child without its live parent cannot accept human input,
   // but its independent Stop below stays available while it runs.
@@ -515,6 +521,7 @@ export const InputBar = memo(function InputBar({
             />
             <div className={css.modes}>
               {accessSelect}
+              {tower !== undefined && <TowerChip tower={tower} t={t} />}
               {sessionId === undefined ? null : renderSlot('conversation.input.plan', { locked })}
             </div>
             {input === undefined || sessionId === undefined

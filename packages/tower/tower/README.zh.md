@@ -83,7 +83,9 @@ kind: "package-reference"
 | 文件 | 职责 |
 |---|---|
 | [`src/index.ts`](src/index.ts) | 插件入口：`Config` schema、`ctx.tower` 门面、`tower:policy` 段落、`/tower` 命令、投影注册 |
-| [`src/types.ts`](src/types.ts) | provider 与工作区词汇、`tower` 投影类型以及 `ctx.tower` 声明 |
+| [`src/types.ts`](src/types.ts) | provider 与工作区词汇、`tower` 服务契约与 `ctx.tower` 声明，并再导出投影叶子模块 |
+| [`src/projection.ts`](src/projection.ts) | `tower` 投影类型与 projection key 声明——`./client` 面供给客户端载体的叶子模块 |
+| [`src/client.ts`](src/client.ts) | 客户端类型面：再导出投影叶子模块，把 Host 的 `ctx.tower` merge 挡在客户端程序之外（纯类型） |
 | — | 不发布运行时不变式伴生入口：模式只有单一权威——会话日志——投影折叠由测试钉住，不存在能与之分叉的第二观测。 |
 
 </details>

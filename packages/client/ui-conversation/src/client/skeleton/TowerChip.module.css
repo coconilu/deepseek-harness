@@ -1,0 +1,45 @@
+/* Active Tower status: a business-accent pill matching the modes row's
+   28px trigger height. */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  min-width: 0;
+  max-width: 220px;
+  padding: 0 10px;
+  border-radius: 24px;
+  background: var(--dsw-alias-state-business-tertiary);
+  color: var(--dsw-alias-state-business-primary);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.base {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dot {
+  flex: 0 0 auto;
+  color: var(--dsw-alias-label-caption);
+}
+
+/* Narrow composer: the base branch name drops so the row keeps fitting (the
+   label stays — it is the chip's only identifier). Same 460px cut as the
+   Access trigger's label collapse. */
+@container (max-width: 460px) {
+  .base,
+  .dot {
+    display: none;
+  }
+}
