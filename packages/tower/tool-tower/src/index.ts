@@ -249,6 +249,12 @@ const FINDING_VALUE_SCHEMA = {
   ],
 } as const satisfies ValueSchemaSpec
 
+// The agent-team tool consumer (packages/experimental/tool-agent-team/src/index.ts)
+// carries the same fixed-record JSON renderer. Extracting one shared copy needs
+// a helper both tool consumers can depend on (e.g. a `@deepseek-ai/dsh-tools`
+// output declaration export); until that lands, the two packages stay decoupled
+// and this duplicate is intentional.
+/* jscpd:ignore-start */
 /**
  * Declare one canonical output schema rendered as compact JSON: every tower
  * result is a fixed record, so the declared schema is what makes the compiler
@@ -265,6 +271,7 @@ function jsonOutput<const S extends ValueSchemaSpec>(schema: S): {
     render: (_args: unknown, value: InferValue<S>) => [{ type: 'text', text: JSON.stringify(value) }],
   }
 }
+/* jscpd:ignore-end */
 
 /** Project one facade mission view onto the model-facing row. */
 function missionRow(mission: TowerMissionView): InferValue<typeof MISSION_ROW_SCHEMA> {
