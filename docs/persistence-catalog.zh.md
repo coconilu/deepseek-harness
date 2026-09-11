@@ -1079,6 +1079,24 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 来源：[`packages/workflow/tool-workflow/src/types.ts:47`](../packages/workflow/tool-workflow/src/types.ts)
 
+### `tower/*`
+
+<a id="towermode--log-only"></a>
+
+#### `tower/mode` — log-only
+
+```ts persistence-catalog
+/**
+ * Whether tower mode is in force from this point on: log-only, non-surface,
+ * whole-value replace. The last `tower/mode` wins; a log with none folds to
+ * inactive through the projection unit's fold.
+ * @param payload - the committed mode; `base` records the base branch of an activation and is absent on deactivation.
+ */
+'tower/mode': { active: boolean; base?: string }
+```
+
+来源：[`packages/tower/tower/src/index.ts:65`](../packages/tower/tower/src/index.ts)
+
 ### `turn/*`
 
 <a id="turnend--log-only"></a>
