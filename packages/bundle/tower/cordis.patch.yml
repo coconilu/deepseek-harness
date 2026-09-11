@@ -32,6 +32,15 @@
       name: '@deepseek-ai/dsh-tower-local'
       config:
         childProvider: spawn
+        # Mission children must not reach the lead-only tower tools; the comms
+        # set stays available so owners can report and coordinate.
+        childToolFilter:
+          - tower_init
+          - tower_spawn
+          - tower_mission
+          - tower_review
+          - tower_merge
+          - tower_teardown
 
     - id: tool-tower
       name: '@deepseek-ai/dsh-tool-tower'

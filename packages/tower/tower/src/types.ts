@@ -247,6 +247,13 @@ export interface TowerTeardownRequest {
   readonly signal: AbortSignal
 }
 
+/**
+ * The provider role of the tower capability seam: owns the `.tower/`
+ * coordination store, git worktrees, and mission children, registered under
+ * {@link TowerProvider.name}. The Service Definition routes every facade
+ * operation to the configured provider; lead-only authority is re-validated
+ * above it, so providers may assume the caller is authorized.
+ */
 export interface TowerProvider {
   /** Unique registry name (e.g. `local`). */
   readonly name: string

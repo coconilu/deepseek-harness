@@ -128,7 +128,10 @@ describe('tower profile bundle', () => {
     })
     expect(rows.find(row => row.id === 'tower-local')).toMatchObject({
       name: '@deepseek-ai/dsh-tower-local',
-      config: { childProvider: 'spawn' },
+      config: {
+        childProvider: 'spawn',
+        childToolFilter: [...ToolTower.MISSION_TOOL_FILTER.deny],
+      },
     })
     expect(rows.find(row => row.id === 'tool-tower')).toMatchObject({
       name: '@deepseek-ai/dsh-tool-tower',

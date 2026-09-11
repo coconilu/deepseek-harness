@@ -246,17 +246,28 @@ export class TowerStore {
     return join(this.dir, 'worktrees')
   }
 
-  /** Absolute path of one mission record. */
+  /**
+   * Absolute path of one mission record.
+   * @param id - mission whose record path is returned.
+   * @returns absolute path of the mission record.
+   */
   missionPath(id: TowerMissionId): string {
     return join(this.missionsDir, `${id}.json`)
   }
 
-  /** Absolute path of one mission's review journal. */
+  /**
+   * Absolute path of one mission's review journal.
+   * @param id - mission whose review journal path is returned.
+   * @returns absolute path of the mission's review journal.
+   */
   reviewsPath(id: TowerMissionId): string {
     return join(this.reviewsDir, `${id}.jsonl`)
   }
 
-  /** Whether the `.tower/` directory exists at all. */
+  /**
+   * Whether the `.tower/` directory exists at all.
+   * @returns whether the `.tower/` directory exists at all.
+   */
   exists(): boolean {
     return existsSync(this.dir)
   }
@@ -268,12 +279,18 @@ export class TowerStore {
     await mkdir(this.worktreesDir, { recursive: true })
   }
 
-  /** Read the workspace record, or `undefined` when never written. */
+  /**
+   * Read the workspace record, or `undefined` when never written.
+   * @returns the workspace record, or `undefined` when never written.
+   */
   async readWorkspace(): Promise<TowerWorkspace | undefined> {
     return readJsonDocument(this.workspacePath, workspaceSchema)
   }
 
-  /** Atomically replace the workspace record. */
+  /**
+   * Atomically replace the workspace record.
+   * @param workspace - workspace record to persist.
+   */
   async writeWorkspace(workspace: TowerWorkspace): Promise<void> {
     await writeJsonAtomic(this.workspacePath, workspace)
   }
@@ -282,6 +299,7 @@ export class TowerStore {
    * Read every mission record in creation order. Allocation scans filenames,
    * so a stray non-mission file is ignored and a corrupt mission file fails
    * loud instead of being skipped.
+   * @returns every mission record in creation order.
    */
   async listMissions(): Promise<TowerMission[]> {
     const files = await this.missionFiles()
@@ -294,33 +312,52 @@ export class TowerStore {
     return missions
   }
 
-  /** Read one mission record, or `undefined` when absent. */
+  /**
+   * Read one mission record, or `undefined` when absent.
+   * @param id - mission to read.
+   * @returns the mission record, or `undefined` when absent.
+   */
   async readMission(id: TowerMissionId): Promise<TowerMission | undefined> {
     return readJsonDocument(this.missionPath(id), missionSchema)
   }
 
-  /** Atomically replace one mission record. */
+  /**
+   * Atomically replace one mission record.
+   * @param mission - mission record to persist.
+   */
   async writeMission(mission: TowerMission): Promise<void> {
     await writeJsonAtomic(this.missionPath(mission.id), mission)
   }
 
-  /** Allocate the next monotonic mission id from the filename scan. */
+  /**
+   * Allocate the next monotonic mission id from the filename scan.
+   * @returns the next monotonic mission id.
+   */
   async nextMissionId(): Promise<TowerMissionId> {
     const last = (await this.missionFiles()).at(-1)
     return TowerMissionId(`m-${last === undefined ? 1 : missionFileNumber(last) + 1}`)
   }
 
-  /** Append one finding and return nothing; ids allocate from the parsed journal. */
+  /**
+   * Append one finding and return nothing; ids allocate from the parsed journal.
+   * @param finding - finding to append; its id must come from {@link TowerStore.nextFindingId}.
+   */
   async appendFinding(finding: TowerFinding): Promise<void> {
     await appendJsonl(this.findingsPath, finding)
   }
 
-  /** Read every finding in recording order. */
+  /**
+   * Read every finding in recording order.
+   * @returns every finding in recording order.
+   */
   async readFindings(): Promise<TowerFinding[]> {
     return readJsonl(this.findingsPath, findingSchema)
   }
 
-  /** Allocate the next monotonic finding id from the parsed journal. */
+  /**
+   * Allocate the next monotonic finding id from the parsed journal.
+   * @returns the next monotonic finding id.
+   */
   async nextFindingId(): Promise<TowerFindingId> {
     let max = 0
     for (const finding of await this.readFindings()) {
@@ -330,37 +367,61 @@ export class TowerStore {
     return TowerFindingId(`f-${max + 1}`)
   }
 
-  /** Append one message to the journal. */
+  /**
+   * Append one message to the journal.
+   * @param message - message to append.
+   */
   async appendMessage(message: TowerMessage): Promise<void> {
     await appendJsonl(this.messagesPath, message)
   }
 
-  /** Read every recorded message in recording order. */
+  /**
+   * Read every recorded message in recording order.
+   * @returns every recorded message in recording order.
+   */
   async readMessages(): Promise<TowerMessage[]> {
     return readJsonl(this.messagesPath, messageSchema)
   }
 
-  /** Append one activity entry. */
+  /**
+   * Append one activity entry.
+   * @param entry - activity entry to append.
+   */
   async appendActivity(entry: TowerActivityEntry): Promise<void> {
     await appendJsonl(this.activityPath, entry)
   }
 
-  /** Read the whole activity journal in recording order. */
+  /**
+   * Read the whole activity journal in recording order.
+   * @returns the whole activity journal in recording order.
+   */
   async readActivity(): Promise<TowerActivityEntry[]> {
     return readJsonl(this.activityPath, activitySchema)
   }
 
-  /** Append one review round to a mission's journal. */
+  /**
+   * Append one review round to a mission's journal.
+   * @param id - mission whose journal receives the round.
+   * @param round - review round to append.
+   */
   async appendReview(id: TowerMissionId, round: TowerReviewRound): Promise<void> {
     await appendJsonl(this.reviewsPath(id), round)
   }
 
-  /** Read every review round of one mission in recording order. */
+  /**
+   * Read every review round of one mission in recording order.
+   * @param id - mission whose review rounds are read.
+   * @returns every review round of the mission in recording order.
+   */
   async readReviews(id: TowerMissionId): Promise<TowerReviewRound[]> {
     return readJsonl(this.reviewsPath(id), reviewSchema)
   }
 
-  /** Synchronous review read for the invariant companion's commit-time check. */
+  /**
+   * Synchronous review read for the invariant companion's commit-time check.
+   * @param id - mission whose review rounds are read.
+   * @returns every review round of the mission in recording order.
+   */
   readReviewsSync(id: TowerMissionId): TowerReviewRound[] {
     return readJsonlSync(this.reviewsPath(id), reviewSchema)
   }
