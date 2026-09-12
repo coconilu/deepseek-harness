@@ -120,20 +120,24 @@ export async function serveStatic(
 function diagnoseClientBuildConsistency(distRoot: string): void {
   const consistency = verifyClientDistAgainstBuildRecord(distRoot)
   if (consistency.status === 'consistent' || consistency.status === 'missing-record') return
-  if (consistency.status === 'unreadable-record') {
+  if (consistency.status === 'dist-mismatch') {
     console.error(
-      `frontend-static: the client build record ${consistency.recordPath} cannot be verified (${consistency.detail}); `
-      + 'the browser may run code from an unknown build. '
-      + 'Run `pnpm run build` to rebuild the client artifacts and restore the record.',
+      `frontend-static: the served frontend dist ${distRoot} does not match the client build record `
+      + `${consistency.recordPath} (recorded commit ${consistency.commitHash ?? 'unknown'}); `
+      + 'the browser may run code from an earlier or different build. '
+      + 'Run `pnpm run build` to rebuild the client artifacts and refresh the record, '
+      + 'or run `pnpm run dev:web` to keep them rebuilt while developing; the record refreshes only on a complete build.',
     )
     return
   }
+  // The record or the dist cannot be read at all; name which one and why.
+  const subject = consistency.status === 'unreadable-record'
+    ? `the client build record ${consistency.recordPath} cannot be verified`
+    : `the frontend dist ${distRoot} cannot be verified against the client build record ${consistency.recordPath}`
   console.error(
-    `frontend-static: the served frontend dist ${distRoot} does not match the client build record `
-    + `${consistency.recordPath} (recorded commit ${consistency.commitHash ?? 'unknown'}); `
-    + 'the browser may run code from an earlier or different build. '
-    + 'Run `pnpm run build` to rebuild the client artifacts and refresh the record, '
-    + 'or run `pnpm run dev:web` to keep them rebuilt while developing; the record refreshes only on a complete build.',
+    `frontend-static: ${subject} (${consistency.detail}); `
+    + 'the browser may run code from an unknown build. '
+    + 'Run `pnpm run build` to rebuild the client artifacts and restore the record.',
   )
 }
 

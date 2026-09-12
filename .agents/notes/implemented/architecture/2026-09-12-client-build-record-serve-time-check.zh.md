@@ -14,7 +14,7 @@ Status: implemented
 
 记录格式为版本 2，在完整产物 digest 之外新增一个 `dist` digest，它以 dist 根目录的相对路径对前端 dist 目录计算。服务器因此可以从它所服务的目录重算该 digest，无需了解仓库布局。
 
-激活时 `frontend-static` 用从 dist 根目录向上找到的记录校验 dist。dist 不匹配或记录不可读时，输出可操作的 `console.error`，指明记录、记录的 commit 以及两条补救路径——刷新记录的完整构建 `pnpm run build`，监视循环 `pnpm run dev:web`。没有任何祖先记录的 dist 保持静默，因此自定义与 preview 部署照常启动，校验也绝不阻塞服务。`dev-web` 会提示记录只在完整构建时刷新，从而在源头说明监视循环的预期偏差。
+激活时 `frontend-static` 用从 dist 根目录向上找到的记录校验 dist。dist 不匹配、记录不可读或 dist 无法遍历时，输出可操作的 `console.error`，指明失败一侧、记录可读时的 commit 以及两条补救路径——刷新记录的完整构建 `pnpm run build`，监视循环 `pnpm run dev:web`。没有任何祖先记录的 dist 保持静默，因此自定义与 preview 部署照常启动，校验也绝不阻塞服务。`dev-web` 会提示记录只在完整构建时刷新，从而在源头说明监视循环的预期偏差。
 
 ## Alternatives considered
 

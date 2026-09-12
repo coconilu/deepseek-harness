@@ -14,7 +14,7 @@ The record module lives in `@deepseek-ai/dsh-host-frontend-static` (`src/client-
 
 The record format is version 2 and adds a `dist` digest computed over the frontend dist directory with dist-root-relative paths, beside the complete artifact digest. A server can therefore recompute the digest from the directory it serves without knowing the repository layout.
 
-At activation `frontend-static` verifies the dist against the record found by walking up from the dist root. A dist-mismatch or an unreadable record logs an actionable `console.error` naming the record, the recorded commit, and both remedies — `pnpm run build` for the complete build that refreshes the record, `pnpm run dev:web` for the watch loop. A dist with no ancestor record stays silent, so custom and preview deployments boot unchanged, and the check never blocks serving. `dev-web` prints that the record refreshes only on a complete build, so the watch loop's expected divergence is named at its source.
+At activation `frontend-static` verifies the dist against the record found by walking up from the dist root. A dist-mismatch, an unreadable record, or a dist that cannot be walked logs an actionable `console.error` naming the failing side, the recorded commit where the record is readable, and both remedies — `pnpm run build` for the complete build that refreshes the record, `pnpm run dev:web` for the watch loop. A dist with no ancestor record stays silent, so custom and preview deployments boot unchanged, and the check never blocks serving. `dev-web` prints that the record refreshes only on a complete build, so the watch loop's expected divergence is named at its source.
 
 ## Alternatives considered
 

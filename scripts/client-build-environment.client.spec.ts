@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import yaml from 'js-yaml'
@@ -301,11 +301,29 @@ describe('client build environment', () => {
   it('rejects a record from an older format', () => {
     const fixtureRoot = buildFixture({})
     const recordPath = join(fixtureRoot, '.dsh-build/client-build-environment.json')
+    // A real legacy record: format 1 had no dist digest, so its shape lacks the key.
     const legacy = JSON.parse(readFileSync(recordPath, 'utf8')) as Record<string, unknown>
     legacy.formatVersion = 1
+    delete legacy.dist
     writeFileSync(recordPath, `${JSON.stringify(legacy, null, 2)}\n`)
 
     expect(() => { readClientBuildRecord(fixtureRoot) }).toThrow(/format 1/)
+  })
+
+  it('reports an unreadable dist as a data outcome instead of throwing', () => {
+    const fixtureRoot = buildFixture({})
+    const dist = join(fixtureRoot, 'apps/web/dist')
+    // A dangling link is listed by the dist walk and fails its stat, the same
+    // window a file vanishing between listing and stat exercises.
+    symlinkSync(join(dist, 'vanished-target'), join(dist, 'dangling'), 'junction')
+
+    const outcome = verifyClientDistAgainstBuildRecord(dist)
+    expect(outcome).toMatchObject({
+      status: 'dist-unreadable',
+      recordPath: join(fixtureRoot, '.dsh-build/client-build-environment.json'),
+    })
+    if (outcome.status !== 'dist-unreadable') throw new TypeError('expected a dist-unreadable outcome')
+    expect(outcome.detail).toMatch(/ENOENT/)
   })
 
   it('verifies a served dist against its nearest build record without throwing', () => {

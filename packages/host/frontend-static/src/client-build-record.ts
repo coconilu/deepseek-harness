@@ -57,6 +57,7 @@ export type ClientDistConsistency =
   | { readonly status: 'consistent'; readonly recordPath: string; readonly commitHash: string | undefined }
   | { readonly status: 'missing-record' }
   | { readonly status: 'unreadable-record'; readonly recordPath: string; readonly detail: string }
+  | { readonly status: 'dist-unreadable'; readonly recordPath: string; readonly detail: string }
   | { readonly status: 'dist-mismatch'; readonly recordPath: string; readonly commitHash: string | undefined }
 
 /**
@@ -130,7 +131,9 @@ export function readClientBuildRecord(
  * silent instead of failing; an existing record that no longer describes the
  * dist is exactly the silent-stale-code state this check exists to expose.
  * @param distRoot - absolute frontend dist root a server is about to serve.
- * @returns the comparison outcome; never throws for a bad record or dist.
+ * @returns the comparison outcome; never throws — a record that cannot be
+ * parsed and a dist that cannot be walked (a file vanishing between listing
+ * and stat, a dangling link) are data outcomes like any other.
  */
 export function verifyClientDistAgainstBuildRecord(distRoot: string): ClientDistConsistency {
   const recordPath = findClientBuildRecordPath(distRoot)
@@ -144,7 +147,13 @@ export function verifyClientDistAgainstBuildRecord(distRoot: string): ClientDist
     return { status: 'unreadable-record', recordPath, detail }
   }
   const commitHash = record.environment.DSH_CLIENT_COMMIT_HASH
-  const served = clientDistDigest(distRoot)
+  let served: ClientArtifactDigest
+  try {
+    served = clientDistDigest(distRoot)
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    return { status: 'dist-unreadable', recordPath, detail }
+  }
   if (served.fileCount !== record.dist.fileCount || served.sha256 !== record.dist.sha256) {
     return { status: 'dist-mismatch', recordPath, commitHash }
   }
@@ -237,14 +246,19 @@ function normalizeClientEnvironment(environment: Readonly<Record<string, string>
 
 /** Parse and validate the persisted record before any consumer trusts it. */
 function parseClientBuildRecord(value: unknown): ClientBuildRecord {
-  if (!isObject(value) || !hasExactKeys(value, ['artifacts', 'dist', 'environment', 'formatVersion'])) {
+  if (!isObject(value)) {
     throw new Error(`client build record ${CLIENT_BUILD_RECORD_PATH} has an invalid top-level schema`)
   }
+  // The format check precedes the key check: a real legacy record lacks the
+  // keys this format added, and its remedy must name the format, not the schema.
   if (value.formatVersion !== CLIENT_BUILD_RECORD_FORMAT) {
     throw new Error(
       `client build record ${CLIENT_BUILD_RECORD_PATH} uses format ${String(value.formatVersion)}; expected ${String(CLIENT_BUILD_RECORD_FORMAT)}`
         + '; run a complete pnpm run build to regenerate it',
     )
+  }
+  if (!hasExactKeys(value, ['artifacts', 'dist', 'environment', 'formatVersion'])) {
+    throw new Error(`client build record ${CLIENT_BUILD_RECORD_PATH} has an invalid top-level schema`)
   }
   if (!isObject(value.environment)) {
     throw new Error(`client build record ${CLIENT_BUILD_RECORD_PATH} has an invalid environment`)

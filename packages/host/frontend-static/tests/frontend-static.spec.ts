@@ -6,7 +6,7 @@
  * GET/HEAD, and seat release on fiber disposal (HMR safety).
  */
 
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -240,5 +240,17 @@ describe('real Loader composition', () => {
     expect(message).toContain('abc1234')
     expect(message).toContain('pnpm run build')
     expect(message).toContain('pnpm run dev:web')
+  })
+
+  it('boots and reports when the served dist cannot be walked', { timeout: 60_000 }, async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await loadComposition(async (fixtureRoot) => {
+      await symlink(join(fixtureRoot, 'vanished-target'), join(fixtureRoot, 'dist', 'dangling'), 'junction')
+      await writeBuildRecord(fixtureRoot, { fileCount: 3, sha256: '1'.repeat(64) })
+    })
+    expect(errorSpy).toHaveBeenCalledTimes(1)
+    const message = errorSpy.mock.calls.map(call => call.join(' ')).join('\n')
+    expect(message).toContain('cannot be verified against the client build record')
+    expect(message).toContain('pnpm run build')
   })
 })
