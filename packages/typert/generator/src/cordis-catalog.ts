@@ -16,6 +16,7 @@ import type {
   SignatureModel,
   SourceDeclarationModel,
   SourceLocation,
+  TypeDeclarationModel,
   TypertFace,
   TypeNodeId,
 } from './model.ts'
@@ -287,9 +288,9 @@ export class CordisCatalogProjector {
       if (doc === '') {
         violations.push(`service ctx.${service.key} (${source}): ${declaration.kind} ${declaration.name} has no JSDoc.`)
       }
+      const members = this.serviceMembers(service, declaration)
       const methods: ServiceMethodEntry[] = []
-      for (const memberId of service.members) {
-        const member = this.renderer.member(memberId)
+      for (const member of members) {
         if (member.name.startsWith('[')) continue
         const parsed = parseJsDoc(member.jsDoc ?? '')
         if (parsed.deprecated) continue
@@ -325,6 +326,66 @@ export class CordisCatalogProjector {
     reportViolations('gen-cordis-catalog', violations)
     reportTypeLinkViolations('gen-cordis-catalog', typeLinkViolations)
     return entries.sort((left, right) => left.key.localeCompare(right.key))
+  }
+
+  /**
+   * The full public surface of one service: the members inherited through
+   * the Service Definition's interface `extends` chain first, then the
+   * Definition's own members (overloads included, source order kept). An
+   * inherited member whose name an own member declares is omitted in favor
+   * of the own one; inherited members sharing a name with each other (an
+   * overload set) stay intact in walk order.
+   * Interface heritage IS contract composition — a Service Definition that
+   * extends a shared operations interface publishes those operations on
+   * `ctx.<key>`, so omitting them degrades the catalogued surface. Class
+   * heritage stays unflattened: a class names an implementation, and a
+   * harness service class's base is framework plumbing (cordis `Service`,
+   * `TypertRemoteService`) whose members belong to the inherited tier, not
+   * the service contract.
+   * @param service - the discovered service whose own members are the seed.
+   * @param declaration - the Service Definition's declaration model.
+   * @returns inherited members (nearest ancestor first), then own members.
+   */
+  private serviceMembers(service: ServiceModel, declaration: TypeDeclarationModel): MemberModel[] {
+    const own = service.members.map(memberId => this.renderer.member(memberId))
+    const shadows = new Set(own.map(member => member.name))
+    const inherited = this.heritageMembers(declaration).filter(member => !shadows.has(member.name))
+    return [...inherited, ...own]
+  }
+
+  /**
+   * The members a declaration inherits through its interface `extends`
+   * chain, pre-order depth-first in declaration order. Only same-face
+   * interface declarations flatten: standard-library and framework heritage
+   * (cordis `Service`, standard interfaces) belongs to the inherited tier,
+   * and cross-face heritage is documented by its declaring face's catalog.
+   * @param declaration - the declaration whose heritage to walk.
+   * @returns inherited members, nearest ancestor first.
+   */
+  private heritageMembers(declaration: TypeDeclarationModel): MemberModel[] {
+    const result: MemberModel[] = []
+    this.collectHeritageMembers(declaration, new Set([declaration.id]), result)
+    return result
+  }
+
+  private collectHeritageMembers(
+    declaration: TypeDeclarationModel,
+    visited: Set<string>,
+    result: MemberModel[],
+  ): void {
+    for (const heritageId of declaration.extends) {
+      const node = this.renderer.node(heritageId)
+      /* v8 ignore next 2 -- convertHeritage models every heritage clause as a reference node; the guard narrows the closed node union. */
+      if (node.kind !== 'reference') continue
+      if (node.target.kind !== 'declaration') continue
+      const parent = this.renderer.declaration(node.target.symbol)
+      if (parent.kind !== 'interface') continue
+      /* v8 ignore next 2 -- TypeScript rejects cyclic extends; the visited set bounds diamond heritage so a shared base lists once. */
+      if (visited.has(parent.id)) continue
+      visited.add(parent.id)
+      result.push(...parent.members)
+      this.collectHeritageMembers(parent, visited, result)
+    }
   }
 
   private runtimeTypes(

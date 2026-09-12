@@ -348,6 +348,117 @@ Authority: `init`, `spawnMission`, `abortMission`, `recordReview`, `merge`, and 
 
 ```ts cordis-catalog
 /**
+ * Create the workspace under the caller session's git root, or adopt an
+ * existing one: the recorded base must match the session's logged tower
+ * base, missions carry over, and owners no longer live are reconciled to
+ * `interrupted`.
+ * @param caller - exact live lead Agent whose session owns the workspace.
+ * @returns the workspace and adoption facts.
+ */
+init(caller: Agent): Promise<TowerWorkspaceInfo>
+
+/**
+ * Read the dashboard: unmerged missions with owner liveness and review-gate
+ * state, the findings count, and the activity tail.
+ * @param caller - exact live lead or mission Agent.
+ * @returns the current dashboard.
+ */
+status(caller: Agent): Promise<TowerDashboard>
+
+/**
+ * Create one mission: allocate its id, fork the base into a new worktree,
+ * start the mission child there, and record the provisioning outcome.
+ * @param caller - exact live lead Agent.
+ * @param request - title, complete task prompt, and caller cancellation
+ * owning the operation until initial inbox acceptance.
+ * @returns the active mission row.
+ */
+spawnMission(caller: Agent, request: TowerSpawnRequest): Promise<TowerMissionView>
+
+/**
+ * Interrupt the mission's live child (preserving its inbox) and mark the
+ * mission `aborted`; its branch and worktree stay for inspection.
+ * @param caller - exact live lead Agent.
+ * @param id - the mission to abort.
+ * @returns the updated mission row.
+ */
+abortMission(caller: Agent, id: TowerMissionId): Promise<TowerMissionView>
+
+/**
+ * Record one message and deliver it: `lead` receives it as a parent-inbox
+ * notice, one mission id through adjacent-Agent messaging, and `all` fans
+ * out to every live mission child.
+ * @param caller - exact live lead or mission Agent.
+ * @param request - address, content, and pre-delivery cancellation.
+ * @returns the recorded message.
+ */
+sendMessage(caller: Agent, request: TowerMessageRequest): Promise<TowerMessage>
+
+/**
+ * Read messages addressed to the caller (`all` included), newest last.
+ * @param caller - exact live lead or mission Agent.
+ * @param limit - maximum messages returned, taken from the newest.
+ * @returns the caller's inbox slice.
+ */
+inbox(caller: Agent, limit?: number): Promise<TowerMessage[]>
+
+/**
+ * Persist one finding visible to every tower participant.
+ * @param caller - exact live lead or mission Agent.
+ * @param request - finding title and body.
+ * @returns the recorded finding.
+ */
+recordFinding(caller: Agent, request: TowerFindingRequest): Promise<TowerFinding>
+
+/**
+ * List every recorded finding in creation order.
+ * @param caller - exact live lead or mission Agent.
+ * @returns all findings.
+ */
+listFindings(caller: Agent): Promise<TowerFinding[]>
+
+/**
+ * Append one review round for a mission, stamping the current branch tip.
+ * `approve` marks the mission `approved`; `reject` returns it to `active`
+ * for rework.
+ * @param caller - exact live lead Agent.
+ * @param request - mission, verdict, and review summary.
+ * @returns the recorded round.
+ */
+recordReview(caller: Agent, request: TowerReviewRequest): Promise<TowerReviewRound>
+
+/**
+ * Merge one mission branch back into the base. The merge gate refuses
+ * loudly unless the mission is `approved`, the latest review round's commit
+ * still equals the branch tip, and the main checkout sits on the recorded
+ * base. On success the worktree is removed and the mission is `merged`.
+ * @param caller - exact live lead Agent.
+ * @param id - the mission to merge.
+ * @returns the merged mission and its merge commit.
+ */
+merge(caller: Agent, id: TowerMissionId): Promise<TowerMergeResult>
+
+/**
+ * End the workspace's active work: interrupt live mission children, remove
+ * mission worktrees (dirty ones are kept and reported unless `force`), and
+ * leave the `.tower/` coordination record in place as the audit trail.
+ * Tower mode in the session stays on.
+ * @param caller - exact live lead Agent.
+ * @param request - whether to remove dirty worktrees, and caller cancellation.
+ * @returns removal and interruption facts.
+ */
+teardown(caller: Agent, request: TowerTeardownRequest): Promise<TowerTeardownResult>
+
+/**
+ * Whether `session` is the recorded owner of an unmerged mission — the
+ * durable authority behind mission-side comms tools, valid across cold
+ * resume because it reads the mission record.
+ * @param session - the candidate session.
+ * @returns true when the session owns an unmerged mission.
+ */
+isMissionOwner(session: Session): Promise<boolean>
+
+/**
  * Register one backend under its {@link TowerProvider.name}. The
  * registration is an owned effect: disposing the caller's fiber removes it.
  * @param provider - the backend to publish.
@@ -362,7 +473,7 @@ registerProvider(provider: TowerProvider): void
 mode(agent: Agent): TowerModeState
 ```
 
-Types: [Agent](core.zh.md)
+Types: [Agent](core.zh.md) · [Session](session.zh.md)
 
 Source: [`packages/tower/tower/src/types.ts`](../../packages/tower/tower/src/types.ts)
 
