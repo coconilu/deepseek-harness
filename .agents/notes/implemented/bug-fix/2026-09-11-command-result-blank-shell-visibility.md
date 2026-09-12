@@ -22,7 +22,7 @@ Three pieces restore the render path. The command execute transaction engages th
 
 ## Consequences
 
-A command submission docks the composer and shows the transcript on a fresh session exactly like a prompt, and the durable row — success or error — is the persistent, reload-surviving outcome surface. The composer stays silent for admitted commands, as designed, and sessions whose only command settled without text keep the hero. The engagement is submission-local: a command executed by another client (CLI, ACP) against a session this browser holds blank still does not summon the transcript, because nothing local flips the edge. Closing that gap needs the Conversation assembler to activate view targets without a mounted consumer and deserves its own decision.
+A command submission docks the composer and shows the transcript on a fresh session exactly like a prompt, and the durable row — success or error — is the persistent, reload-surviving outcome surface. The composer stays silent for admitted commands, as designed, and sessions whose only command settled without text keep the hero. The engagement edge remains submission-local by design; the cross-client path this left open — another client's command on a session this browser holds blank — is closed by [Cross-client activity lights the blank shell](2026-09-12-cross-client-activity-lights-blank-shell.md), which activates view targets from session activity without a mounted consumer.
 
 ## Testing
 

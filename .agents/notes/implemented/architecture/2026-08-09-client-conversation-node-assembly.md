@@ -309,7 +309,7 @@ Unknown fallback demonstrates Registry ownership: it handles only append-surface
 
 [`ConversationViewRegistry`](../../../../packages/client/ui-conversation/src/client/conversation/view-registry.ts) stores an independent builder factory for each target and shares no Session's ordering or caches.
 
-A shell selection or a target source's first subscriber adds that target to the Session's monotonic active-target set. The Assembler indexes each Context under its sole target but creates no builder, Node, or snapshot for an inactive target. First activation flushes pending target-neutral work, creates the builder, and calls `replace({ nodes, timeline })` once from that target's current Contexts.
+A shell selection, a target source's first subscriber, or session activity landing on a binding with no active target yet ([Cross-client activity lights the blank shell](../bug-fix/2026-09-12-cross-client-activity-lights-blank-shell.md)) adds that target to the Session's monotonic active-target set. The Assembler indexes each Context under its sole target but creates no builder, Node, or snapshot for an inactive target. First activation flushes pending target-neutral work, creates the builder, and calls `replace({ nodes, timeline })` once from that target's current Contexts.
 
 The shell synchronously resolves the persisted selection when a Session binding becomes available, when a cached binding becomes current, or when the View roster changes, then explicitly activates that registered View or the Chat fallback. Tab and focus actions activate their resolved target before updating selection state. A blank Session does not render the View slot, and `ConversationSnapshot.activeTargets` derives only from materialized active snapshots without querying inactive target Contexts for activity.
 
@@ -358,7 +358,7 @@ SessionEventLike window
 
 ## Verification
 
-Runtime tests pin Definition lifecycle registration, exact-ID append, update-before-start collection followed by forward replay after start, prepend identity, Reader window-gap repair, transitive dependencies, Location closure, Step→Turn data phase order, Location data replacement, publication cadence, illegal withdrawal, first-subscription activation, monotonic active targets, and per-target Builders.
+Runtime tests pin Definition lifecycle registration, exact-ID append, update-before-start collection followed by forward replay after start, prepend identity, Reader window-gap repair, transitive dependencies, Location closure, Step→Turn data phase order, Location data replacement, publication cadence, illegal withdrawal, first-subscription activation, activity-triggered activation of consumer-less bindings, monotonic active targets, and per-target Builders.
 
 Conversation tests cover every built-in Chat Definition, Assistant Step data, Turn Tail and Deliverables Turn data, Chat ordering and structural sharing, selector isolation, Assistant and Tool running-to-settled identity, nested Code Dispatch, steering, Compaction, Retry, interruption, load-older anchoring, and slot dispatch. Trajectory tests cover its independently registered Message, Assistant, Tool, Compaction, Request-header, and boundary Definitions together with the preserved stage-oriented view model.
 
