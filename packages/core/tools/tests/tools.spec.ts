@@ -8,10 +8,11 @@ import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import ApprovalService, { type ApprovalOutcome, type ApprovalRequest } from '@deepseek-ai/dsh-user-approval'
 import ToolRuntime, {
-  defineContentToolFixture, defineTool, JsonSchemaError, parameterSchemaSpecToJsonSchema, validateArgs, ToolArgsError, ToolNotFoundError,
-  TOOL_ABORTED, TOOL_ABORTED_BEFORE_DISPATCH,
+  defineContentToolFixture, defineTool, JsonSchemaError, jsonOutput, parameterSchemaSpecToJsonSchema, validateArgs,
+  ToolArgsError, ToolNotFoundError, TOOL_ABORTED, TOOL_ABORTED_BEFORE_DISPATCH,
   type InferArgs, type ParameterSchemaSpec, type PreToolDecision, type PostToolDecision,
   type JsonSchemaNode, type ToolDefinition, type ToolDispatchExecution, type ToolExecutionResult, type ToolExecutionToken,
+  type ValueSchemaSpec,
 } from '@deepseek-ai/dsh-tools'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 
@@ -2047,6 +2048,19 @@ describe('ToolRuntime', () => {
     await fiber.dispose()
     expect(order).toEqual(['registered', 'first: still registered', 'disposed-last'])
     expect(ctx.tools.get('nested')).toBeUndefined()
+  })
+})
+
+describe('jsonOutput', () => {
+  it('pairs the declared schema with one lossless compact-JSON text block', () => {
+    const schema = {
+      type: 'object',
+      additionalProperties: false,
+      properties: { id: { type: 'integer', required: true } },
+    } as const satisfies ValueSchemaSpec
+    const output = jsonOutput(schema)
+    expect(output.schema).toEqual(schema)
+    expect(output.render({ ignored: true }, { id: 7 })).toEqual([{ type: 'text', text: '{"id":7}' }])
   })
 })
 

@@ -15,6 +15,7 @@ import type { UserMessage } from '@deepseek-ai/dsh-session'
 import { assertNever, deepFreeze, snapshotJsonValue, type JsonValue } from '@deepseek-ai/dsh-util-values'
 import type { ToolProviderResult } from '@deepseek-ai/dsh-system-prompt'
 import type { CodeRuntime } from '@deepseek-ai/dsh-code-runtime'
+import type { InferValue, ValueSchemaSpec } from './schema.ts'
 // Type-only: makes `ctx.get('approval')` resolve to the ApprovalService
 // augmentation. The seam stays optional at runtime — see `serviceAsk`.
 import type {} from '@deepseek-ai/dsh-user-approval'
@@ -208,6 +209,24 @@ export interface ToolOutputDefinition {
   render(args: unknown, value: JsonValue): ContentBlock[]
   /** Pure replayable presentation projection, computed only for top-level calls. */
   presentationMeta?(args: unknown, value: JsonValue): JsonValue
+}
+
+/**
+ * Declare one canonical output schema rendered as compact JSON. A fixed-record
+ * tool result pairs the declared schema — what makes the compiler check
+ * `execute` against the value the model is promised — with one lossless
+ * compact-JSON text block.
+ * @param schema - canonical value schema for one tool.
+ * @returns the `output` declaration accepted by {@link defineTool}.
+ */
+export function jsonOutput<const S extends ValueSchemaSpec>(schema: S): {
+  schema: S
+  render: (args: unknown, value: InferValue<S>) => [{ type: 'text'; text: string }]
+} {
+  return {
+    schema,
+    render: (_args: unknown, value: InferValue<S>) => [{ type: 'text', text: JSON.stringify(value) }],
+  }
 }
 
 /** A registered tool: its schema plus the execution function. */
