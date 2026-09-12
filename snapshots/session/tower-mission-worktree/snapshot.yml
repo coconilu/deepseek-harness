@@ -1,0 +1,29 @@
+version: 1
+scenario: tower-mission-worktree
+profile: headless
+composition: tower-mission-worktree
+recording: authored
+# POSIX-only replay: the tower tool results embed JSON-stringified workspace
+# paths, whose backslash JSON escaping the shared normalizer cannot tokenize
+# on Windows; the required macOS/Linux lane tokenizes them cleanly. Same
+# reason as tower-merge-flow.
+platform: posix
+header:
+  class: default
+  pin: true
+  changes: 1
+  promptChanges: 1
+  childSystemPrompts: [1]
+  childToolSchemas: [1]
+permission: workspace-write
+environment:
+  GIT_CONFIG_NOSYSTEM: '1'
+  GIT_CONFIG_GLOBAL: /dev/null
+  GIT_AUTHOR_DATE: '2026-09-11T00:00:00+00:00'
+  GIT_COMMITTER_DATE: '2026-09-11T00:00:00+00:00'
+  GIT_AUTHOR_NAME: 'Tower Snapshot Fixture'
+  GIT_AUTHOR_EMAIL: tower-snapshot@example.invalid
+  GIT_COMMITTER_NAME: 'Tower Snapshot Fixture'
+  GIT_COMMITTER_EMAIL: tower-snapshot@example.invalid
+workspace:
+  setup: tower-git-fixture-empty
