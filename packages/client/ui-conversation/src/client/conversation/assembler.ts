@@ -393,6 +393,24 @@ export class ConversationNodeAssembler implements ConversationViewSnapshotStore 
   }
 
   /**
+   * Activate every defined view target when session activity has landed with
+   * no active target yet. A binding whose consumer never mounted — external
+   * client activity (CLI, ACP) on a session this browser holds blank — still
+   * needs materialized target snapshots for the shell to classify activity and
+   * leave the blank phase; a session that receives no activity stays
+   * unactivated, keeping the hero. Activation stays monotonic.
+   * @returns whether any target became active.
+   */
+  activateWithoutConsumers(): boolean {
+    if (this.activeTargets.size > 0 || this.inputs.size === 0) return false
+    let activated = false
+    for (const view of this.views.values()) {
+      activated = this.activateTarget(view.target) || activated
+    }
+    return activated
+  }
+
+  /**
    * Read the latest snapshot of a registered target.
    * @param target - registered view target.
    * @returns target snapshot, or undefined before registration or activation.

@@ -309,7 +309,7 @@ Unknown fallback 展示了 Registry ownership：fallback 只处理没有任何�
 
 [`ConversationViewRegistry`](../../../../packages/client/ui-conversation/src/client/conversation/view-registry.ts) 为每个 target 保存独立的 builder factory，不共享某个 Session 的排序或缓存。
 
-shell 选择或 target source 的首个 subscriber 会把该 target 加入 Session 单调增长的 active-target set。Assembler 按唯一 target 索引每个 Context，但不会为 inactive target 创建 builder、Node 或 snapshot。首次激活会 flush 尚未发布的 target-neutral 工作、创建 builder，并从该 target 的当前 Context 调用一次 `replace({ nodes, timeline })`。
+shell 选择、target source 的首个 subscriber，或会话活动落在尚无 active target 的 binding 上（见[跨客户端活动点亮 blank 空态外壳](../bug-fix/2026-09-12-cross-client-activity-lights-blank-shell.zh.md)）都会把该 target 加入 Session 单调增长的 active-target set。Assembler 按唯一 target 索引每个 Context，但不会为 inactive target 创建 builder、Node 或 snapshot。首次激活会 flush 尚未发布的 target-neutral 工作、创建 builder，并从该 target 的当前 Context 调用一次 `replace({ nodes, timeline })`。
 
 Session binding 可用、缓存的 binding 成为 current 或 View roster 变化时，shell 会同步解析持久化选择，再显式激活已注册的偏好 View 或 Chat fallback。Tab 与 focus action 在更新选择状态前先激活解析出的 target。blank Session 不渲染 View slot；`ConversationSnapshot.activeTargets` 只从已物化的 active snapshot 派生，不查询 inactive target Context 的 activity。
 
@@ -358,7 +358,7 @@ SessionEventLike window
 
 ## 验证
 
-Runtime tests 固定 Definition 生命周期注册、exact-ID append、update-before-start 收集与 start 后正序 replay、prepend identity、Reader window-gap 修复、传递依赖、Location closure、Step→Turn data phase order、Location data replacement、publication cadence、非法撤回、首次订阅 activation、单调 active target 和 per-target Builder。
+Runtime tests 固定 Definition 生命周期注册、exact-ID append、update-before-start 收集与 start 后正序 replay、prepend identity、Reader window-gap 修复、传递依赖、Location closure、Step→Turn data phase order、Location data replacement、publication cadence、非法撤回、首次订阅 activation、无消费者 binding 的活动触发 activation、单调 active target 和 per-target Builder。
 
 Conversation tests 覆盖全部内建 Chat Definition、Assistant Step data、Turn Tail 与 Deliverables Turn data、Chat 排序和结构共享、selector isolation、Assistant/Tool running-to-settled identity、nested Code Dispatch、steering、Compaction、Retry、interruption、load-older anchoring 和 slot dispatch。Trajectory tests 则覆盖它独立注册的 Message、Assistant、Tool、Compaction、Request-header 与 boundary Definition，以及继续保留的 stage-oriented view model。
 
