@@ -1,0 +1,52 @@
+# Tower mission-worktree composition for the tower-mission-worktree snapshot.
+# The ordinary snapshot composition (text-turn) owns startup, persistence, the
+# fs tools, the one-shot `spawn` subagent provider, and the workspace-write
+# permission preset; this overlay mounts the tower bundle's Service Definition
+# and tool consumer and replaces the local backend with the scenario-local
+# deterministic provider fixture (worktree-fixture provider: real git worktree
+# provisioning, mission child Session started inside the worktree, pinned
+# record timestamps). The shell tools stay disabled so the committed tool
+# schemas are platform-stable. Bash tool results and the child's write reuse
+# relative paths, so the fixture replays on macOS, Linux, and Windows alike.
+
+- id: tool-pwsh
+  disabled: true
+
+- id: tool-bash
+  disabled: true
+
+- id: system-prompt
+  config:
+    includeRuntimeContext: false
+    personaPrefix: |
+      You are a coding assistant powered by the {{model}} model. Your working directory is {{cwd}}. Your bash tool runs under a file sandbox — a `[sandbox: file access denied …]` result is policy, not a command bug.
+
+      Verify your work by running the code or tests. Keep answers brief and factual.
+
+- insert:
+    - id: tower
+      name: '@deepseek-ai/dsh-tower'
+      config:
+        section: >-
+          Tower mode is active: you are the lead. Use the tower_* tools to fan work
+          out instead of doing everything in one session. Call tower_init once to
+          create or adopt the tower at the calling session's git root; it records the
+          base branch and the .tower/ coordination store. Split the work into missions
+          with tower_spawn: each mission runs in its own git worktree branched from
+          the base, driven by a child agent, so the mission prompt must be
+          self-contained. Monitor with tower_status, exchange context with tower_send
+          and tower_inbox, and record shared discoveries with tower_finding. A mission
+          lands only through the review gate: record a review round with tower_review,
+          and call tower_merge only after an approve verdict covers the mission's
+          current commit. Use tower_mission to abort a mission; tower_teardown ends
+          the workspace's active work. tower_merge and tower_teardown ask the user for
+          approval first: any other outcome means nothing happened, so never retry
+          without the user's explicit approval.
+        provider: worktree-fixture
+        maxMissions: 8
+
+    - id: tool-tower
+      name: '@deepseek-ai/dsh-tool-tower'
+
+    - id: worktree-fixture
+      name: './worktree-fixture.mjs'

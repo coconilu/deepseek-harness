@@ -22,6 +22,8 @@ import {
   formatToolSchemasSnapshot,
   latestPersistedSessionPaths,
   materializeProfilePatch,
+  normalizeSessionFormatProvenance,
+  normalizeSessionLog,
   normalizeSessionSnapshots,
   normalizedHeaders,
   normalizedSystemPrompts,
@@ -177,6 +179,59 @@ function contextOf(logs: readonly string[]): NormalizeContext {
   }
 }
 
+/**
+ * One log's volatile-value context: the shared run's session ids with that
+ * log's own header cwd. Committed fixtures and prompt sidecars tokenize
+ * against the session header that owns them, so a child Session recorded in
+ * its own workspace (a tower mission worktree) must be normalized under the
+ * child cwd, not the primary cwd — the shared parent context would leave the
+ * child's own workspace spelling untokenized. Logs whose cwd equals the
+ * primary's normalize identically under either context.
+ *
+ * @param log - one session JSONL whose header supplies the cwd.
+ * @param shared - the run-wide context providing the session ids.
+ * @returns the log's own-cwd context.
+ */
+function contextOfLog(log: string, shared: NormalizeContext): NormalizeContext {
+  const header = headerOf(log)
+  return {
+    sessionIds: shared.sessionIds,
+    cwd: typeof header.cwd === 'string' ? header.cwd : shared.cwd,
+  }
+}
+
+/**
+ * Normalize each session log against its own header cwd instead of the
+ * primary log's. Every committed fixture is tokenized against its own session
+ * header, so a child Session whose recorded cwd differs from the parent's — a
+ * tower mission child running in its git worktree — must be compared under
+ * that same child cwd; a shared parent context spells the child's own
+ * workspace as `{{cwd}}/<suffix>` and structurally mismatches the child
+ * header and every child-rooted absolute path. Logs whose cwd equals the
+ * primary's — every pre-existing fixture — normalize identically to
+ * {@link normalizeSessionSnapshots}. Header-pin request-header verification
+ * stays on the shared primary context (request headers carry no cwd); child
+ * prompt sidecars normalize per role through {@link contextOfLog}.
+ *
+ * Unlike {@link normalizeSessionSnapshots}, this composition does not gate
+ * projection on `sessionFormat.version`: every headless input is a versioned
+ * Session artifact (`assertSessionFixtureVersion` / `assertPersistedSessionVersion`
+ * already refuse anything else).
+ *
+ * @param rawLogs - primary-first persisted or projected session JSONL.
+ * @returns normalized committed session snapshot JSONL in input order.
+ */
+function normalizeSessionSnapshotsPerRole(rawLogs: readonly string[]): string[] {
+  const comparable = redactSessionSnapshotIds(rawLogs.map(log =>
+    normalizeSessionFormatProvenance(prepareSessionSnapshotFixtureForComparison(log))))
+  const shared = { sessionIds: [], cwd: '\0missing-cwd\0' }
+  return comparable.map((log, index) => scrubSessionSnapshot(normalizeSessionLog(
+    log,
+    contextOfLog(rawLogs[index] as string, shared),
+    { identityMode: 'preserve' },
+  )))
+}
+
 async function persistedSessions(cwd: string): Promise<SessionLog[]> {
   const root = join(cwd, '.dsh', 'sessions')
   const files = latestPersistedSessionPaths(await readdir(root, { recursive: true }))
@@ -226,7 +281,6 @@ async function writeSessionFixtures(
   scenario: HeadlessScenario,
   actualLogs: readonly SessionLog[],
   existing: readonly string[],
-  ctx: NormalizeContext,
 ): Promise<string[]> {
   const names = actualLogs.map((log, index) => scenario.manifest.sessionFormat === undefined
     ? sessionFixtureName(index, sessionHeaderVersion(log.content, `harvested Session ${index}`))
@@ -235,9 +289,14 @@ async function writeSessionFixtures(
   const replacements = mode === 'refresh'
     ? refreshFixtureReplacements(actualLogs.map(harvested), prior)
     : []
+  // Refresh stabilization aligns each log's volatile strings against the prior
+  // fixture under that log's own header cwd, matching the per-role comparison:
+  // a child Session recorded in its own workspace (a tower mission worktree)
+  // carries child-rooted paths the shared parent context cannot align.
+  const shared = contextOf(actualLogs.map(log => log.content))
   const fresh = actualLogs.map((log, index) => {
     const stable = tokenizeSessionFixtureCwd(mode === 'refresh'
-      ? stabilizeRefreshLog(log.content, prior[index] as string, replacements, ctx)
+      ? stabilizeRefreshLog(log.content, prior[index] as string, replacements, contextOfLog(log.content, shared))
       : log.content)
     return scrubSessionSnapshot(prepareSessionSnapshotFixtureForComparison(stable))
   })
@@ -282,7 +341,7 @@ async function writeHeaderSidecars(
   for (const index of scenario.manifest.header.childSystemPrompts ?? []) {
     const child = actualLogs[index]
     if (child === undefined) throw new Error(`${scenario.name}: write-back has no child ${index} prompt`)
-    const prompts = normalizedSystemPrompts(child.content, ctx)
+    const prompts = normalizedSystemPrompts(child.content, contextOfLog(child.content, ctx))
     await writeFile(
       join(scenario.dir, `system-prompt.${index}.expected.md`),
       formatSystemPromptSnapshot(prompts[0] as string, prompts.slice(1)),
@@ -291,7 +350,7 @@ async function writeHeaderSidecars(
   for (const index of scenario.manifest.header.childToolSchemas ?? []) {
     const child = actualLogs[index]
     if (child === undefined) throw new Error(`${scenario.name}: write-back has no child ${index} schemas`)
-    const schemas = normalizedToolSchemas(child.content, ctx)
+    const schemas = normalizedToolSchemas(child.content, contextOfLog(child.content, ctx))
     await writeFile(
       join(scenario.dir, `tool-schemas.${index}.expected.json`),
       formatToolSchemasSnapshot(schemas[0] as unknown[], schemas.slice(1)),
@@ -509,30 +568,48 @@ const workspaceSetups: Record<string, (cwd: string) => Promise<void>> = {
    * so mission and merge commits reproduce the same hashes every run.
    */
   async 'tower-git-fixture'(cwd) {
-    const gitEnv = {
-      ...process.env,
-      GIT_CONFIG_NOSYSTEM: '1',
-      GIT_CONFIG_GLOBAL: '/dev/null',
-      GIT_AUTHOR_DATE: TOWER_FIXTURE_GIT_DATE,
-      GIT_COMMITTER_DATE: TOWER_FIXTURE_GIT_DATE,
-      GIT_AUTHOR_NAME: TOWER_FIXTURE_GIT_IDENTITY,
-      GIT_AUTHOR_EMAIL: TOWER_FIXTURE_GIT_EMAIL,
-      GIT_COMMITTER_NAME: TOWER_FIXTURE_GIT_IDENTITY,
-      GIT_COMMITTER_EMAIL: TOWER_FIXTURE_GIT_EMAIL,
-    }
-    const git = (args: string[]): void => {
-      const result = spawnSync('git', args, { cwd, env: gitEnv, encoding: 'utf8' })
-      if (result.status !== 0) throw new Error(`tower git fixture: git ${args.join(' ')} failed: ${result.stderr}`)
-    }
-    git(['init', '-b', 'main'])
-    git(['config', 'user.name', TOWER_FIXTURE_GIT_IDENTITY])
-    git(['config', 'user.email', TOWER_FIXTURE_GIT_EMAIL])
-    git(['config', 'commit.gpgsign', 'false'])
-    git(['config', 'core.autocrlf', 'false'])
-    git(['config', 'gc.auto', '0'])
+    await towerGitFixture(cwd, false)
+  },
+
+  /**
+   * Same deterministic repository as {@link towerGitFixture} with an empty
+   * root commit: a scenario whose seeded workspace stays empty (no committed
+   * README) keeps the documentation pairing gate out of its fixture tree.
+   */
+  async 'tower-git-fixture-empty'(cwd) {
+    await towerGitFixture(cwd, true)
+  },
+}
+
+/** Shared git environment and invocation for the pinned tower git setups. */
+function towerGitFixture(cwd: string, empty: boolean): void {
+  const gitEnv = {
+    ...process.env,
+    GIT_CONFIG_NOSYSTEM: '1',
+    GIT_CONFIG_GLOBAL: '/dev/null',
+    GIT_AUTHOR_DATE: TOWER_FIXTURE_GIT_DATE,
+    GIT_COMMITTER_DATE: TOWER_FIXTURE_GIT_DATE,
+    GIT_AUTHOR_NAME: TOWER_FIXTURE_GIT_IDENTITY,
+    GIT_AUTHOR_EMAIL: TOWER_FIXTURE_GIT_EMAIL,
+    GIT_COMMITTER_NAME: TOWER_FIXTURE_GIT_IDENTITY,
+    GIT_COMMITTER_EMAIL: TOWER_FIXTURE_GIT_EMAIL,
+  }
+  const git = (args: string[]): void => {
+    const result = spawnSync('git', args, { cwd, env: gitEnv, encoding: 'utf8' })
+    if (result.status !== 0) throw new Error(`tower git fixture: git ${args.join(' ')} failed: ${result.stderr}`)
+  }
+  git(['init', '-b', 'main'])
+  git(['config', 'user.name', TOWER_FIXTURE_GIT_IDENTITY])
+  git(['config', 'user.email', TOWER_FIXTURE_GIT_EMAIL])
+  git(['config', 'commit.gpgsign', 'false'])
+  git(['config', 'core.autocrlf', 'false'])
+  git(['config', 'gc.auto', '0'])
+  if (empty) {
+    git(['commit', '--allow-empty', '-m', 'Initial commit'])
+  } else {
     git(['add', 'README.md'])
     git(['commit', '-m', 'Initial commit'])
-  },
+  }
 }
 
 async function collectScenarios(): Promise<HeadlessScenario[]> {
@@ -651,7 +728,7 @@ async function verifyHeaders(scenario: HeadlessScenario, actualLogs: readonly Se
 
   for (const [logIndex, log] of actualLogs.entries()) {
     const headers = normalizedHeaders(log.content, ctx)
-    const prompts = normalizedSystemPrompts(log.content, ctx)
+    const prompts = normalizedSystemPrompts(log.content, contextOfLog(log.content, ctx))
     if (headers.length > 0) {
       expect(systemPromptPrecedesRequests(log.content), `${scenario.name}: a system/message precedes the first request/header`).toBe(true)
       expect(prompts.length, `${scenario.name}: system/message count`)
@@ -745,6 +822,83 @@ describe('headless recorded-session snapshots', () => {
       .map(row => JSON.stringify(row)).join('\n') + '\n'
     const context = contextOf([packed])
     expect(normalizeSessionSnapshots([packed], context)).toEqual(normalizeSessionSnapshots([unpacked], context))
+  })
+
+  it('normalizes a child Session recorded outside the primary cwd against its own header cwd', () => {
+    const root = '/tmp/dsh-log-snap-fixture'
+    const childCwd = `${root}/.tower/worktrees/m-1`
+    const toolCallRow = (callId: string) => ({
+      type: 'assistant/message',
+      data: {
+        turn: 1,
+        step: 1,
+        message: {
+          role: 'assistant',
+          content: [{ type: 'tool-call', id: callId, name: 'read', arguments: '{}' }],
+          source: { kind: 'model', provider: 'deepseek-official', model: 'deepseek-v4-flash' },
+          id: 'assistant-msg',
+        },
+        usage: { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, reasoningTokens: 0 },
+        stream: [
+          { type: 'chunk', time: 1, chunk: { type: 'block-start', index: 0, blockType: 'tool-call' } },
+          { type: 'chunk', time: 1, chunk: { type: 'tool-call-delta', index: 0, id: callId, name: 'read', argumentsDelta: '{}' } },
+          { type: 'chunk', time: 1, chunk: { type: 'block-end', index: 0, block: { type: 'tool-call', id: callId, name: 'read', arguments: '{}' } } },
+          { type: 'chunk', time: 1, chunk: { type: 'usage', usage: { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, reasoningTokens: 0 } } },
+          { type: 'chunk', time: 1, chunk: { type: 'finish', reason: { kind: 'tool-calls' } } },
+        ],
+      },
+      surfaceOp: 'append',
+    })
+    const resultText = (text: string) => ({
+      type: 'tool/result',
+      data: {
+        turn: 1,
+        step: 1,
+        message: {
+          source: { kind: 'tool', callId: 'call_read' },
+          content: [{ type: 'tool-result', toolCallId: 'call_read', content: [{ type: 'text', text }], isError: false }],
+          role: 'user',
+          id: 'result-msg',
+        },
+      },
+      surfaceOp: 'append',
+    })
+    const parentLog = [
+      { type: 'session', version: SESSION_FORMAT_VERSION, id: 'parent-session', createdAt: 1, cwd: root, isSeeded: false, delegationDepth: 0 },
+      { type: 'turn/start', data: { turn: 1 } },
+      { type: 'step/start', data: { turn: 1, step: 1 } },
+      toolCallRow('call_read'),
+      { type: 'tool/call', data: { turn: 1, step: 1, callId: 'call_read', name: 'read', arguments: '{}' } },
+      resultText(`{"worktree":"${root}/.tower/worktrees/m-1"}`),
+      { type: 'step/end', data: { turn: 1, step: 1 } },
+      { type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } },
+    ].map(record => JSON.stringify(record)).join('\n') + '\n'
+    const childLog = [
+      {
+        type: 'session', version: SESSION_FORMAT_VERSION, id: 'child-session', createdAt: 5,
+        cwd: childCwd, parentSession: 'parent-session', isSeeded: false, origin: 'subagent', delegationDepth: 1,
+      },
+      { type: 'turn/start', data: { turn: 1 } },
+      { type: 'step/start', data: { turn: 1, step: 1 } },
+      toolCallRow('call_read'),
+      { type: 'tool/call', data: { turn: 1, step: 1, callId: 'call_read', name: 'read', arguments: '{}' } },
+      resultText(`<path>${childCwd}/mission-notes.md</path>`),
+      { type: 'step/end', data: { turn: 1, step: 1 } },
+      { type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } },
+    ].map(record => JSON.stringify(record)).join('\n') + '\n'
+
+    const actual = normalizeSessionSnapshotsPerRole([parentLog, childLog])
+    const committed = [parentLog, childLog].map(log => tokenizeSessionFixtureCwd(log))
+    expect(normalizeSessionSnapshotsPerRole(committed)).toEqual(actual)
+
+    // Regression pin: the shared primary-cwd context spells the live child's
+    // own workspace as `{{cwd}}/.tower/worktrees/m-1` and structurally
+    // mismatches the committed child fixture, which is tokenized against the
+    // child cwd.
+    const shared = { sessionIds: [], cwd: root }
+    expect(normalizeSessionSnapshots([parentLog, childLog], shared)).not.toEqual(actual)
+    expect(normalizeSessionSnapshotsPerRole(committed)[1]).toContain('"cwd":"{{cwd}}"')
+    expect(normalizeSessionSnapshotsPerRole(committed)[1]).toContain('{{cwd}}/mission-notes.md')
   })
 
   it('replays original inbox mentions before normalized user messages', () => {
@@ -1026,7 +1180,6 @@ describe('headless recorded-session snapshots', () => {
           scenario,
           actualLogs,
           fixtures,
-          actualContext,
         )
         fixtureFiles = actualLogs.map((log, index) => sessionFixtureName(
           index,
@@ -1045,15 +1198,15 @@ describe('headless recorded-session snapshots', () => {
       }
       let expected = fixtures
       if (scenario.manifest.sessionFormat !== undefined) {
-        if (mode === 'refresh') await writeSessionFixtures(scenario, actualLogs, fixtures, actualContext)
+        if (mode === 'refresh') await writeSessionFixtures(scenario, actualLogs, fixtures)
         expected = await Promise.all(fixtures.map((_, index) => readFile(join(scenario.dir, writerSnapshotName(index)), 'utf8')))
         for (const [index, content] of expected.entries()) {
           expect(sessionHeaderVersion(content, writerSnapshotName(index))).toBe(SESSION_FORMAT_VERSION)
         }
         expect(await fixtureSessions(scenario), 'historical replay input remains unchanged').toEqual(fixtures)
       }
-      const actualSnapshots = normalizeSessionSnapshots(actualLogs.map(log => log.content), actualContext)
-      const expectedSnapshots = normalizeSessionSnapshots(expected, contextOf(expected))
+      const actualSnapshots = normalizeSessionSnapshotsPerRole(actualLogs.map(log => log.content))
+      const expectedSnapshots = normalizeSessionSnapshotsPerRole(expected)
       for (const [index, actual] of actualSnapshots.entries()) {
         expect(records(actual), `${scenario.name}: session ${index}`).toEqual(records(expectedSnapshots[index] as string))
       }

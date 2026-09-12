@@ -12,6 +12,8 @@ Committed sessions are normalization fixed points. Replace volatile identities w
 
 An adapter-local symlink may expose a cross-profile prompt or schema sidecar only when `snapshot.yml` names that source; the corpus gate resolves the link and checks the declared target. The required snapshot lane runs these aliases on macOS and Linux.
 
+Each Session fixture and prompt sidecar is tokenized and compared against its own session header's cwd, so a child role may record a cwd below the parent's (a tower mission child in its git worktree); absolute references that cross between a child cwd and the parent cwd stay untokenizable and unsupported. A scenario whose tool results embed JSON-stringified workspace paths declares `platform: posix`, because Windows backslash escaping defeats cwd tokenization.
+
 Workspace seeds stay scenario-local. A scenario that mutates the workspace sets `workspace.final: true` and commits the complete result under `workspace.expected/`; use only the ignored `.empty` marker for an empty result. Record and refresh do not rewrite this independent oracle. Model prose and tool-result text do not prove the external effect.
 
 `pnpm run test:snapshot` replays without writes. Recording and refresh use the explicit snapshot scripts, and every resulting JSONL, prompt, schema, protocol, UI, and workspace diff is reviewed before commit.
