@@ -1,7 +1,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SessionSeq } from '@deepseek-ai/dsh-session/types'
-import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import type { SessionId, SessionEvent } from '@deepseek-ai/dsh-session/types'
 import { createAssistantMessage, LlmAttemptId } from '@deepseek-ai/dsh-llm'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import {
@@ -9,9 +9,11 @@ import {
 } from '@deepseek-ai/dsh-api-session-controller/client'
 import type {
   ISessions, SessionBinding, SessionEventLike, SessionFace, SessionListState, SessionSnapshot,
+  SessionLiveEventEntry,
 } from '@deepseek-ai/dsh-api-session-controller/client'
 import {
   ConversationEventRegistry, ConversationNodeAssembler, ConversationViewRegistry, UiConversation,
+  conversationPhase,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {
   ConversationNodeDefinition, ConversationViewDefinition, ConversationViewNode,
@@ -408,5 +410,125 @@ describe('Conversation registries', () => {
     expect(trajectorySource.getSnapshot()).toBeUndefined()
     expect(trajectoryListener).toHaveBeenCalledTimes(2)
     unsubscribeTrajectory()
+  })
+})
+
+describe('Cross-client blank engagement', () => {
+  interface CommandState {
+    readonly run?: { readonly name: string }
+    readonly done?: { readonly kind: string; readonly text?: string }
+  }
+
+  const commandDefinition: ConversationNodeDefinition<CommandState> = {
+    kind: 'command',
+    target: 'chat',
+    match: (event) => {
+      if (event.type === 'command/run') return { id: String(event.data.commandId), role: 'start' }
+      if (event.type === 'command/done') return { id: String(event.data.commandId), role: 'update' }
+      return null
+    },
+    start: (_context, match) => ({ run: { name: (match.event.data as { name: string }).name } }),
+    update: (context, match) => {
+      if (match.event.type !== 'command/done') return context.state
+      const { kind, text } = match.event.data
+      return {
+        ...context.state,
+        done: { kind, ...(text === undefined ? {} : { text }) },
+      }
+    },
+    buildViewNode: (context) => {
+      if (context.state?.run === undefined) return null
+      return { key: context.key, kind: 'command', id: context.id, target: 'chat', data: context.state }
+    },
+  }
+
+  const chatView: ConversationViewDefinition<ConversationViewNode, readonly ConversationViewNode[]> = {
+    target: 'chat',
+    create: () => ({
+      empty: [],
+      replace: input => input.nodes,
+      apply: input => input.upserts,
+    }),
+    // Mirrors the Chat target's shell-activity classification: any visible
+    // non-command node is activity, while a command is activity only when its
+    // settlement carries a visible result (pinned in ui-chat; only the shell
+    // wiring is under test here).
+    isActive: snapshot => snapshot.some((node) => {
+      if (node.kind !== 'command') return true
+      const done = (node.data as CommandState).done
+      return done !== undefined && (done.kind === 'error' || done.text !== undefined)
+    }),
+  }
+
+  async function bootEngagement(): Promise<{
+    conversation: ReturnType<UiConversation['binding']>
+    source: MutableSessionEventSource
+  }> {
+    const { uiConversation, binding } = await bootRegistries()
+    uiConversation.events.register(commandDefinition)
+    uiConversation.views.register(chatView)
+    await Promise.resolve()
+    return {
+      conversation: uiConversation.binding(binding),
+      source: binding.eventSource as MutableSessionEventSource,
+    }
+  }
+
+  const commandEvent = (seq: number, text?: string): SessionLiveEventEntry => ({
+    type: 'event',
+    event: (seq % 2 === 1
+      ? { seq: SessionSeq(seq), time: seq, type: 'command/run', data: { commandId: `c${seq}`, name: 'tower' } }
+      : {
+        seq: SessionSeq(seq),
+        time: seq,
+        type: 'command/done',
+        data: { commandId: `c${seq - 1}`, kind: 'error', ...(text === undefined ? {} : { text }) },
+      }) as unknown as SessionEvent,
+  })
+
+  it('lights the blank shell when another client settles a visible command without any consumer', async () => {
+    const { conversation, source } = await bootEngagement()
+    expect(conversationPhase(sessionSnapshot(), conversation.snapshot.getSnapshot())).toBe('blank')
+
+    source.append(commandEvent(1))
+    source.append(commandEvent(2, 'boom'))
+
+    expect(conversationPhase(sessionSnapshot(), conversation.snapshot.getSnapshot())).toBe('active')
+    expect(conversation.target('chat').getSnapshot()).toHaveLength(1)
+  })
+
+  it('keeps the hero when another client settles a textless lifecycle command', async () => {
+    const { conversation, source } = await bootEngagement()
+    source.append(commandEvent(1))
+    source.append({
+      type: 'event',
+      event: {
+        seq: SessionSeq(2),
+        time: 2,
+        type: 'command/done',
+        data: { commandId: 'c1', kind: 'success' },
+      } as unknown as SessionEvent,
+    })
+
+    expect(conversationPhase(sessionSnapshot(), conversation.snapshot.getSnapshot())).toBe('blank')
+  })
+
+  it('does not activate targets from binding or an empty window alone', async () => {
+    const create = vi.spyOn(chatView, 'create')
+    const { conversation } = await bootEngagement()
+    expect(create).not.toHaveBeenCalled()
+    expect(conversationPhase(sessionSnapshot(), conversation.snapshot.getSnapshot())).toBe('blank')
+    create.mockRestore()
+  })
+
+  it('keeps a shell-selected target lighting up on external activity (submission-local path intact)', async () => {
+    const { conversation, source } = await bootEngagement()
+    conversation.activate('chat')
+    expect(conversationPhase(sessionSnapshot(), conversation.snapshot.getSnapshot())).toBe('blank')
+
+    source.append(commandEvent(1))
+    source.append(commandEvent(2, 'boom'))
+
+    expect(conversationPhase(sessionSnapshot(), conversation.snapshot.getSnapshot())).toBe('active')
   })
 })

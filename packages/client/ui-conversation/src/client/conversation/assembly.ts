@@ -95,7 +95,9 @@ class BoundConversation implements ConversationBinding {
 
   private replace(window: SessionEventWindow): void {
     this.revision = window.revision
-    this.publish(this.assembler.replaceWindow(window.entries, window.hasMore))
+    const publication = this.assembler.replaceWindow(window.entries, window.hasMore)
+    this.engageConsumerless()
+    this.publish(publication)
   }
 
   private accept(window: SessionEventWindow): void {
@@ -106,25 +108,42 @@ class BoundConversation implements ConversationBinding {
     }
     this.revision = window.revision
     switch (window.change.kind) {
-      case 'prepend':
-        this.publish(this.assembler.prepend(window.change.entries, window.hasMore))
+      case 'prepend': {
+        const publication = this.assembler.prepend(window.change.entries, window.hasMore)
+        this.engageConsumerless()
+        this.publish(publication)
         return
+      }
       case 'append': {
         let publication: ConversationPublication = 'none'
         for (const event of window.change.entries) {
           const next = this.assembler.append(event)
           if (next === 'immediate' || publication === 'none') publication = next
         }
+        this.engageConsumerless()
         this.publish(publication)
         return
       }
-      case 'settle-assistant':
-        this.publish(this.assembler.settleAssistant(
+      case 'settle-assistant': {
+        const publication = this.assembler.settleAssistant(
           window.change.attemptId,
           window.change.entry,
-        ))
+        )
+        this.engageConsumerless()
+        this.publish(publication)
         return
+      }
     }
+  }
+
+  /**
+   * Light up a session whose activity arrived while no view consumer mounted:
+   * external client activity on a held blank session must reach the shell even
+   * though nothing subscribed to a target source. No-op once any target is
+   * active, so shell selection and subscribers keep their M9 semantics.
+   */
+  private engageConsumerless(): void {
+    if (this.assembler.activateWithoutConsumers()) this.snapshot.set(this.currentSnapshot())
   }
 
   private publish(publication: ConversationPublication): void {
