@@ -263,4 +263,10 @@ if (isMain) {
     + `, plus tsc -b ${CLIENT_TYPE_PROGRAM} and the ${SHELL_PACKAGE} dist build:\n  `
     + [...pluginDirs, ...libraryDirs].join('\n  '),
   )
+  // The watch loop rewrites artifacts the record binds, so servers that verify
+  // the record will report the divergence; name the one command that restores it.
+  console.log(
+    'dev-web: the client build record (.dsh-build/client-build-environment.json) still describes the last complete build'
+    + ' and refreshes only on the next `pnpm run build`',
+  )
 }

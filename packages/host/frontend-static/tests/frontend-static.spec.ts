@@ -6,31 +6,47 @@
  * GET/HEAD, and seat release on fiber disposal (HMR safety).
  */
 
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import Include from '@deepseek-ai/cordis-plugin-include'
 import * as Connection from '@deepseek-ai/dsh-client-connection'
 import LocalCredentials from '@deepseek-ai/dsh-credentials-local'
 import HttpServer from '@deepseek-ai/dsh-host-webserver'
+import { clientDistDigest } from '../src/client-build-record.ts'
 import * as FrontendStatic from '../src/index.ts'
 
 let root: string | undefined
 let context: Context | undefined
 
 afterEach(async () => {
+  vi.restoreAllMocks()
   await context?.fiber.dispose()
   context = undefined
   if (root !== undefined) await rm(root, { recursive: true, force: true })
   root = undefined
 })
 
+/** Write a client build record beside the fixture dist, carrying the given dist digest. */
+async function writeBuildRecord(
+  fixtureRoot: string,
+  distDigest: { fileCount: number; sha256: string },
+): Promise<void> {
+  await mkdir(join(fixtureRoot, '.dsh-build'), { recursive: true })
+  await writeFile(join(fixtureRoot, '.dsh-build/client-build-environment.json'), `${JSON.stringify({
+    formatVersion: 2,
+    environment: { DSH_CLIENT_COMMIT_HASH: 'abc1234' },
+    artifacts: { fileCount: 1, sha256: '0'.repeat(64) },
+    dist: distDigest,
+  }, null, 2)}\n`)
+}
+
 /** Write a dist fixture and the authenticated Web rows, then boot them through the real Loader. */
-async function loadComposition(): Promise<Context> {
+async function loadComposition(prepare?: (fixtureRoot: string) => Promise<void>): Promise<Context> {
   root = await mkdtemp(join(tmpdir(), 'dsh-frontend-static-'))
   const dist = join(root, 'dist')
   await mkdir(dist)
@@ -40,6 +56,7 @@ async function loadComposition(): Promise<Context> {
   await writeFile(join(dist, 'blob.bin'), 'BLOB')
   await writeFile(join(dist, 'manifest.webmanifest'), '{}')
   await mkdir(join(dist, 'empty'))
+  await prepare?.(root)
   const configPath = join(root, 'cordis.yml')
   await writeFile(configPath, [
     "- name: '@deepseek-ai/dsh-credentials-local'",
@@ -202,5 +219,38 @@ describe('real Loader composition', () => {
     await frontendEntry!.fiber?.dispose()
     expect((await request(port, '/no/such/route')).status).toBe(404)
     expect(() => server.registerFallback(() => {})).not.toThrow()
+  })
+
+  it('stays silent when the served dist matches its client build record', { timeout: 60_000 }, async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await loadComposition(async (fixtureRoot) => {
+      await writeBuildRecord(fixtureRoot, clientDistDigest(join(fixtureRoot, 'dist')))
+    })
+    expect(errorSpy).not.toHaveBeenCalled()
+  })
+
+  it('reports a served dist that no longer matches its client build record', { timeout: 60_000 }, async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await loadComposition(async (fixtureRoot) => {
+      await writeBuildRecord(fixtureRoot, { fileCount: 3, sha256: '1'.repeat(64) })
+    })
+    expect(errorSpy).toHaveBeenCalledTimes(1)
+    const message = errorSpy.mock.calls.map(call => call.join(' ')).join('\n')
+    expect(message).toContain('does not match the client build record')
+    expect(message).toContain('abc1234')
+    expect(message).toContain('pnpm run build')
+    expect(message).toContain('pnpm run dev:web')
+  })
+
+  it('boots and reports when the served dist cannot be walked', { timeout: 60_000 }, async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await loadComposition(async (fixtureRoot) => {
+      await symlink(join(fixtureRoot, 'vanished-target'), join(fixtureRoot, 'dist', 'dangling'), 'junction')
+      await writeBuildRecord(fixtureRoot, { fileCount: 3, sha256: '1'.repeat(64) })
+    })
+    expect(errorSpy).toHaveBeenCalledTimes(1)
+    const message = errorSpy.mock.calls.map(call => call.join(' ')).join('\n')
+    expect(message).toContain('cannot be verified against the client build record')
+    expect(message).toContain('pnpm run build')
   })
 })

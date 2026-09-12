@@ -5,7 +5,10 @@
  * path; missing paths return 404, traversal outside the dist root is 403,
  * unknown extensions ship as octet-stream, and non-GET/HEAD is 405. Every
  * index response first passes Connection's browser authentication, then the
- * webserver's index render (structured injection rows, then raw taps).
+ * webserver's index render (structured injection rows, then raw taps). At
+ * activation the plugin verifies the dist against the nearest client build
+ * record and logs an actionable warning when the record no longer describes
+ * what it serves.
  * Non-index assets stay public. The dist location is workspace knowledge of
  * the composing application, so `distIndex` is typically supplied through a
  * `!!js` expression, never hardcoded by a deployment.
@@ -19,6 +22,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-host-webserver'
+import { verifyClientDistAgainstBuildRecord } from './client-build-record.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'frontend-static'
@@ -106,6 +110,38 @@ export async function serveStatic(
 }
 
 /**
+ * Report a served dist that no longer matches its client build record, once at
+ * activation. A dist outside any build tree has no record and stays silent;
+ * every other outcome that is not proven consistent is a loud, actionable
+ * warning — the browser would otherwise keep running code from an unknown
+ * build with no error anywhere.
+ * @param distRoot - absolute dist root the plugin is about to serve.
+ */
+function diagnoseClientBuildConsistency(distRoot: string): void {
+  const consistency = verifyClientDistAgainstBuildRecord(distRoot)
+  if (consistency.status === 'consistent' || consistency.status === 'missing-record') return
+  if (consistency.status === 'dist-mismatch') {
+    console.error(
+      `frontend-static: the served frontend dist ${distRoot} does not match the client build record `
+      + `${consistency.recordPath} (recorded commit ${consistency.commitHash ?? 'unknown'}); `
+      + 'the browser may run code from an earlier or different build. '
+      + 'Run `pnpm run build` to rebuild the client artifacts and refresh the record, '
+      + 'or run `pnpm run dev:web` to keep them rebuilt while developing; the record refreshes only on a complete build.',
+    )
+    return
+  }
+  // The record or the dist cannot be read at all; name which one and why.
+  const subject = consistency.status === 'unreadable-record'
+    ? `the client build record ${consistency.recordPath} cannot be verified`
+    : `the frontend dist ${distRoot} cannot be verified against the client build record ${consistency.recordPath}`
+  console.error(
+    `frontend-static: ${subject} (${consistency.detail}); `
+    + 'the browser may run code from an unknown build. '
+    + 'Run `pnpm run build` to rebuild the client artifacts and restore the record.',
+  )
+}
+
+/**
  * Claim the webserver fallback seat and serve the dist.
  * @param ctx - plugin context carrying the webServer service.
  * @param config - validated {@link Config}.
@@ -113,6 +149,7 @@ export async function serveStatic(
 export function apply(ctx: Context, config: Config): void {
   const distIndex = config.distIndex
   const distRoot = dirname(distIndex)
+  diagnoseClientBuildConsistency(distRoot)
   // The dist is built with a relative base so the same files mount under any
   // static directory; served pages also answer deep SPA-fallback paths, where
   // relative asset URLs would resolve under the request directory, so the

@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import yaml from 'js-yaml'
@@ -15,6 +15,7 @@ import {
   repositoryGitDirty,
   repositoryVersion,
   resolveClientBuildEnvironment,
+  verifyClientDistAgainstBuildRecord,
   writeClientBuildRecord,
 } from './client-build-environment.ts'
 import { clientBundle } from '../packages/client/tsdown.client.ts'
@@ -269,13 +270,108 @@ describe('client build environment', () => {
     }
     const official = buildFixture(officialEnvironment)
     const defaultBuild = buildFixture({})
+    const officialRecord = JSON.parse(
+      readFileSync(join(official, '.dsh-build/client-build-environment.json'), 'utf8'),
+    ) as { dist: { fileCount: number; sha256: string } }
 
     expect(readClientBuildRecord(official, officialEnvironment).environment).toEqual(officialEnvironment)
+    expect(officialRecord.dist.fileCount).toBe(1)
     expect(() => { readClientBuildRecord(defaultBuild, officialEnvironment) }).toThrow(/DSH_CLIENT_/)
     expect(() => { readClientBuildRecord(join(defaultBuild, 'missing')) }).toThrow(/record.*missing/)
 
     write(join(official, 'apps/web/dist/index.html'), '<main>changed</main>')
     expect(() => { readClientBuildRecord(official) }).toThrow(/artifacts differ/)
+
+    const tamperedDist = buildFixture(officialEnvironment)
+    const recordPath = join(tamperedDist, '.dsh-build/client-build-environment.json')
+    const tampered = JSON.parse(readFileSync(recordPath, 'utf8')) as { dist: { sha256: string } }
+    tampered.dist.sha256 = '0'.repeat(64)
+    writeFileSync(recordPath, `${JSON.stringify(tampered, null, 2)}\n`)
+    expect(() => { readClientBuildRecord(tamperedDist) }).toThrow(/frontend dist differs/)
+  })
+
+  it('refuses to record a complete build without a frontend dist', () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), 'dsh-client-build-no-dist-'))
+    roots.push(fixtureRoot)
+    write(join(fixtureRoot, 'packages/client/example/lib/client.js'), 'module.exports = {}\n')
+
+    expect(() => { writeClientBuildRecord(fixtureRoot, {}) }).toThrow(/no frontend dist/)
+  })
+
+  it('rejects a record from an older format', () => {
+    const fixtureRoot = buildFixture({})
+    const recordPath = join(fixtureRoot, '.dsh-build/client-build-environment.json')
+    // A real legacy record: format 1 had no dist digest, so its shape lacks the key.
+    const legacy = JSON.parse(readFileSync(recordPath, 'utf8')) as Record<string, unknown>
+    legacy.formatVersion = 1
+    delete legacy.dist
+    writeFileSync(recordPath, `${JSON.stringify(legacy, null, 2)}\n`)
+
+    expect(() => { readClientBuildRecord(fixtureRoot) }).toThrow(/format 1/)
+  })
+
+  it('reports an unreadable dist as a data outcome instead of throwing', () => {
+    const fixtureRoot = buildFixture({})
+    const dist = join(fixtureRoot, 'apps/web/dist')
+    // A dangling link is listed by the dist walk and fails its stat, the same
+    // window a file vanishing between listing and stat exercises.
+    symlinkSync(join(dist, 'vanished-target'), join(dist, 'dangling'), 'junction')
+
+    const outcome = verifyClientDistAgainstBuildRecord(dist)
+    expect(outcome).toMatchObject({
+      status: 'dist-unreadable',
+      recordPath: join(fixtureRoot, '.dsh-build/client-build-environment.json'),
+    })
+    if (outcome.status !== 'dist-unreadable') throw new TypeError('expected a dist-unreadable outcome')
+    expect(outcome.detail).toMatch(/ENOENT/)
+  })
+
+  it('verifies a served dist against its nearest build record without throwing', () => {
+    const officialEnvironment = {
+      DSH_CLIENT_BUILD_PROFILE: 'official',
+      DSH_CLIENT_COMMIT_HASH: COMMIT_HASH.slice(0, 7),
+      DSH_CLIENT_TITLE: 'DeepSeek Harness',
+      DSH_CLIENT_VERSION: '1.2.3',
+    }
+    const official = buildFixture(officialEnvironment)
+    const dist = join(official, 'apps/web/dist')
+
+    expect(verifyClientDistAgainstBuildRecord(dist)).toEqual({
+      status: 'consistent',
+      recordPath: join(official, '.dsh-build/client-build-environment.json'),
+      commitHash: COMMIT_HASH.slice(0, 7),
+    })
+
+    write(join(dist, 'index.html'), '<main>changed</main>')
+    expect(verifyClientDistAgainstBuildRecord(dist)).toMatchObject({
+      status: 'dist-mismatch',
+      commitHash: COMMIT_HASH.slice(0, 7),
+    })
+    const plain = buildFixture({})
+    expect(verifyClientDistAgainstBuildRecord(join(plain, 'apps/web/dist'))).toEqual({
+      status: 'consistent',
+      recordPath: join(plain, '.dsh-build/client-build-environment.json'),
+      commitHash: undefined,
+    })
+  })
+
+  it('treats a missing or unusable record as a diagnostic outcome, not a failure', () => {
+    const unrecorded = mkdtempSync(join(tmpdir(), 'dsh-client-build-unrecorded-'))
+    roots.push(unrecorded)
+    write(join(unrecorded, 'apps/web/dist/index.html'), '<main></main>')
+    expect(verifyClientDistAgainstBuildRecord(join(unrecorded, 'apps/web/dist'))).toEqual({ status: 'missing-record' })
+
+    const unreadable = mkdtempSync(join(tmpdir(), 'dsh-client-build-unreadable-'))
+    roots.push(unreadable)
+    write(join(unreadable, 'apps/web/dist/index.html'), '<main></main>')
+    write(join(unreadable, '.dsh-build/client-build-environment.json'), '{not json')
+    const outcome = verifyClientDistAgainstBuildRecord(join(unreadable, 'apps/web/dist'))
+    expect(outcome).toMatchObject({
+      status: 'unreadable-record',
+      recordPath: join(unreadable, '.dsh-build/client-build-environment.json'),
+    })
+    if (outcome.status !== 'unreadable-record') throw new TypeError('expected an unreadable-record outcome')
+    expect(outcome.detail).toMatch(/JSON/)
   })
 
   it('keeps public client values out of workflow-wide environments', () => {
