@@ -341,3 +341,19 @@ export class FixService {
     expect(services[0]?.methods).toHaveLength(0)
   })
 })
+
+describe('gen-cordis-catalog interface-heritage flattening', () => {
+  it('keeps inherited overload sets intact in walk order and lets own members shadow inherited names', () => {
+    const services = collectServices(makeService(
+      '/** Fixture service. */\nexport interface FixService extends FixOperations {\n  /**\n   * Own lifecycle member shadowing the inherited name.\n   * @param id - the own member parameter.\n   * @returns the outcome.\n   */\n  run(id: string): string\n}\n\n/** Shared operations. */\ninterface FixOperations {\n  /**\n   * Register a namespace (typed form).\n   * @param ns - namespace name.\n   * @returns the disposer.\n   */\n  register(ns: string): () => void\n  /**\n   * Register a namespace (locale form).\n   * @param ns - namespace name.\n   * @param locale - locale id.\n   * @returns the disposer.\n   */\n  register(ns: string, locale: string): () => void\n  /**\n   * Do the thing.\n   * @param id - which thing.\n   * @returns the outcome.\n   */\n  run(id: string): string\n}',
+    ))
+    // Inherited tier first: the inherited `register` overload set survives
+    // whole, the own `run` shadows the inherited one, and the own member
+    // keeps its source position.
+    expect(services[0]?.methods.map(method => method.signature)).toEqual([
+      'register(ns: string): () => void',
+      'register(ns: string, locale: string): () => void',
+      'run(id: string): string',
+    ])
+  })
+})

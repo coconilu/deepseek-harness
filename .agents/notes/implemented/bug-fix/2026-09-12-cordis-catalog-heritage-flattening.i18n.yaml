@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-12-cordis-catalog-heritage-flattening.md
-2026-09-12-cordis-catalog-heritage-flattening.md: 43ec97fefe0b8a0b0560bca6ee8a6446d0f8168c
-2026-09-12-cordis-catalog-heritage-flattening.zh.md: 02bb88e94700cf97331fc717329d0d3f54b2ba19
+2026-09-12-cordis-catalog-heritage-flattening.md: 3a64de39713039ff0ade754dab55bb18b525781a
+2026-09-12-cordis-catalog-heritage-flattening.zh.md: e3fa15948afaead6e1cfee47085b6e3e65bfe6a0

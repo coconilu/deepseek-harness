@@ -329,35 +329,38 @@ export class CordisCatalogProjector {
   }
 
   /**
-   * The full public surface of one service: the Service Definition's own
-   * members (overloads included, source order kept), then the members
-   * inherited through its interface `extends` chain; an inherited member
-   * whose name an own member declares is omitted in favor of the own one.
+   * The full public surface of one service: the members inherited through
+   * the Service Definition's interface `extends` chain first, then the
+   * Definition's own members (overloads included, source order kept). An
+   * inherited member whose name an own member declares is omitted in favor
+   * of the own one; inherited members sharing a name with each other (an
+   * overload set) stay intact in walk order.
    * Interface heritage IS contract composition — a Service Definition that
    * extends a shared operations interface publishes those operations on
    * `ctx.<key>`, so omitting them degrades the catalogued surface. Class
-   * heritage stays unflattened: a harness service class's base is framework
-   * plumbing (cordis `Service`, `TypertRemoteService`) whose members belong
-   * to the inherited tier, not the service contract.
+   * heritage stays unflattened: a class names an implementation, and a
+   * harness service class's base is framework plumbing (cordis `Service`,
+   * `TypertRemoteService`) whose members belong to the inherited tier, not
+   * the service contract.
    * @param service - the discovered service whose own members are the seed.
    * @param declaration - the Service Definition's declaration model.
-   * @returns inherited members (base-most first), then own members.
+   * @returns inherited members (nearest ancestor first), then own members.
    */
   private serviceMembers(service: ServiceModel, declaration: TypeDeclarationModel): MemberModel[] {
     const own = service.members.map(memberId => this.renderer.member(memberId))
-    const surface = new Map(this.heritageMembers(declaration).map(member => [member.name, member] as const))
-    for (const member of own) surface.delete(member.name)
-    return [...surface.values(), ...own]
+    const shadows = new Set(own.map(member => member.name))
+    const inherited = this.heritageMembers(declaration).filter(member => !shadows.has(member.name))
+    return [...inherited, ...own]
   }
 
   /**
    * The members a declaration inherits through its interface `extends`
-   * chain, depth-first in declaration order. Only same-face interface
-   * declarations flatten: standard-library and framework heritage (cordis
-   * `Service`, standard interfaces) belongs to the inherited tier, and
-   * cross-face heritage is documented by its declaring face's catalog.
+   * chain, pre-order depth-first in declaration order. Only same-face
+   * interface declarations flatten: standard-library and framework heritage
+   * (cordis `Service`, standard interfaces) belongs to the inherited tier,
+   * and cross-face heritage is documented by its declaring face's catalog.
    * @param declaration - the declaration whose heritage to walk.
-   * @returns inherited members, base-most first.
+   * @returns inherited members, nearest ancestor first.
    */
   private heritageMembers(declaration: TypeDeclarationModel): MemberModel[] {
     const result: MemberModel[] = []

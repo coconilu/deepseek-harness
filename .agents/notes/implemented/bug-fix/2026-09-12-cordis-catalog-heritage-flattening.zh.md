@@ -10,7 +10,7 @@ Status: implemented
 
 ## Decision
 
-Cordis 目录投影（`packages/typert/generator/src/cordis-catalog.ts` 中的 `collectServices`）现在会遍历 Service Definition 的接口 `extends` 链，并把继承成员追加在声明成员之后；同名时声明成员胜出，声明成员的重载保持完整。继承成员与声明成员一样通过 JSDoc 完整性和类型链接门禁。遍历只解析同 face 的接口声明：harness 服务类的基类是框架管线（`Service`、`TypertRemoteService`），其成员属于继承层（[inherited.md](../../../../docs/cordis-api/inherited.md)），而跨 face 或外部继承由声明方的目录记录，两者都跳过。`ctx.tower` 的目录条目先列出十二个共享操作，再列出 `registerProvider` 和 `mode`；`TowerProvider` 实现走同一遍历。
+Cordis 目录投影（`packages/typert/generator/src/cordis-catalog.ts` 中的 `collectServices`）现在会遍历 Service Definition 的接口 `extends` 链，并把继承成员列在声明成员之前；同名时声明成员胜出，声明与继承的重载组都保持完整。继承成员与声明成员一样通过 JSDoc 完整性和类型链接门禁。遍历只解析同 face 的接口声明：harness 服务类的基类是框架管线（`Service`、`TypertRemoteService`），其成员属于继承层（[inherited.md](../../../../docs/cordis-api/inherited.md)），而跨 face 或外部继承由声明方的目录记录，两者都跳过。`ctx.tower` 的目录条目先列出十二个共享操作，再列出 `registerProvider` 和 `mode`；`TowerProvider` 实现走同一遍历。
 
 重新生成的产物是 `packages/extensions/tool-cordis/src/api-catalog.ts` 以及 tower 子系统页语言对的生成区域。该页手工维护的"共享操作"块仍是对 seam 设计的解释；生成区域是机械的成员列表。
 
