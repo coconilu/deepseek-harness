@@ -101,4 +101,17 @@ describe('Typert-backed Cordis catalog', () => {
     expect(byKey.has('dshHomePath')).toBe(false)
     expect(byKey.has('launcherEnvironment')).toBe(false)
   })
+
+  it('flattens interface-heritage members onto the service surface', { timeout: 480_000 }, () => {
+    const tower = projection().model.services.find(service => service.key === 'tower')
+    // `TowerService extends TowerOperations` (not exported) — the twelve shared
+    // operations are part of `ctx.tower`'s contract and must surface beside the
+    // Service Definition's own lifecycle members, inherited tier first.
+    const names = tower?.methods.map(method => /^(?:async\s+)?([A-Za-z_$][\w$]*)/.exec(method.signature)?.[1])
+    expect(names).toEqual([
+      'init', 'status', 'spawnMission', 'abortMission', 'sendMessage', 'inbox',
+      'recordFinding', 'listFindings', 'recordReview', 'merge', 'teardown', 'isMissionOwner',
+      'registerProvider', 'mode',
+    ])
+  })
 })

@@ -2666,6 +2666,78 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'The tower capability published as `ctx.tower`. The service owns the logged mode, provider registry, and caller-authority validation; every inherited operation delegates to the provider selected by Config once authority passes. The contract lives on the `./types` face so provider packages compile against contracts alone.\n\nAuthority: `init`, `spawnMission`, `abortMission`, `recordReview`, `merge`, and `teardown` are lead-only — the caller\'s session must carry active tower mode. `status`, `sendMessage`, `inbox`, `recordFinding`, and `listFindings` additionally admit recorded mission owners.',
     methods: [
       {
+        signature: 'init(caller: Agent): Promise<TowerWorkspaceInfo>',
+        description: 'Create the workspace under the caller session\'s git root, or adopt an existing one: the recorded base must match the session\'s logged tower base, missions carry over, and owners no longer live are reconciled to `interrupted`.',
+        parameters: [{ name: 'caller', description: 'exact live lead Agent whose session owns the workspace.' }],
+        returns: 'the workspace and adoption facts.',
+      },
+      {
+        signature: 'status(caller: Agent): Promise<TowerDashboard>',
+        description: 'Read the dashboard: unmerged missions with owner liveness and review-gate state, the findings count, and the activity tail.',
+        parameters: [{ name: 'caller', description: 'exact live lead or mission Agent.' }],
+        returns: 'the current dashboard.',
+      },
+      {
+        signature: 'spawnMission(caller: Agent, request: TowerSpawnRequest): Promise<TowerMissionView>',
+        description: 'Create one mission: allocate its id, fork the base into a new worktree, start the mission child there, and record the provisioning outcome.',
+        parameters: [{ name: 'caller', description: 'exact live lead Agent.' }, { name: 'request', description: 'title, complete task prompt, and caller cancellation owning the operation until initial inbox acceptance.' }],
+        returns: 'the active mission row.',
+      },
+      {
+        signature: 'abortMission(caller: Agent, id: TowerMissionId): Promise<TowerMissionView>',
+        description: 'Interrupt the mission\'s live child (preserving its inbox) and mark the mission `aborted`; its branch and worktree stay for inspection.',
+        parameters: [{ name: 'caller', description: 'exact live lead Agent.' }, { name: 'id', description: 'the mission to abort.' }],
+        returns: 'the updated mission row.',
+      },
+      {
+        signature: 'sendMessage(caller: Agent, request: TowerMessageRequest): Promise<TowerMessage>',
+        description: 'Record one message and deliver it: `lead` receives it as a parent-inbox notice, one mission id through adjacent-Agent messaging, and `all` fans out to every live mission child.',
+        parameters: [{ name: 'caller', description: 'exact live lead or mission Agent.' }, { name: 'request', description: 'address, content, and pre-delivery cancellation.' }],
+        returns: 'the recorded message.',
+      },
+      {
+        signature: 'inbox(caller: Agent, limit?: number): Promise<TowerMessage[]>',
+        description: 'Read messages addressed to the caller (`all` included), newest last.',
+        parameters: [{ name: 'caller', description: 'exact live lead or mission Agent.' }, { name: 'limit', description: 'maximum messages returned, taken from the newest.' }],
+        returns: 'the caller\'s inbox slice.',
+      },
+      {
+        signature: 'recordFinding(caller: Agent, request: TowerFindingRequest): Promise<TowerFinding>',
+        description: 'Persist one finding visible to every tower participant.',
+        parameters: [{ name: 'caller', description: 'exact live lead or mission Agent.' }, { name: 'request', description: 'finding title and body.' }],
+        returns: 'the recorded finding.',
+      },
+      {
+        signature: 'listFindings(caller: Agent): Promise<TowerFinding[]>',
+        description: 'List every recorded finding in creation order.',
+        parameters: [{ name: 'caller', description: 'exact live lead or mission Agent.' }],
+        returns: 'all findings.',
+      },
+      {
+        signature: 'recordReview(caller: Agent, request: TowerReviewRequest): Promise<TowerReviewRound>',
+        description: 'Append one review round for a mission, stamping the current branch tip. `approve` marks the mission `approved`; `reject` returns it to `active` for rework.',
+        parameters: [{ name: 'caller', description: 'exact live lead Agent.' }, { name: 'request', description: 'mission, verdict, and review summary.' }],
+        returns: 'the recorded round.',
+      },
+      {
+        signature: 'merge(caller: Agent, id: TowerMissionId): Promise<TowerMergeResult>',
+        description: 'Merge one mission branch back into the base. The merge gate refuses loudly unless the mission is `approved`, the latest review round\'s commit still equals the branch tip, and the main checkout sits on the recorded base. On success the worktree is removed and the mission is `merged`.',
+        parameters: [{ name: 'caller', description: 'exact live lead Agent.' }, { name: 'id', description: 'the mission to merge.' }],
+        returns: 'the merged mission and its merge commit.',
+      },
+      {
+        signature: 'teardown(caller: Agent, request: TowerTeardownRequest): Promise<TowerTeardownResult>',
+        description: 'End the workspace\'s active work: interrupt live mission children, remove mission worktrees (dirty ones are kept and reported unless `force`), and leave the `.tower/` coordination record in place as the audit trail. Tower mode in the session stays on.',
+        parameters: [{ name: 'caller', description: 'exact live lead Agent.' }, { name: 'request', description: 'whether to remove dirty worktrees, and caller cancellation.' }],
+        returns: 'removal and interruption facts.',
+      },
+      {
+        signature: 'isMissionOwner(session: Session): Promise<boolean>',
+        description: 'Whether `session` is the recorded owner of an unmerged mission — the durable authority behind mission-side comms tools, valid across cold resume because it reads the mission record.',
+        parameters: [{ name: 'session', description: 'the candidate session.' }],
+        returns: 'true when the session owns an unmerged mission.',
+      },
+      {
         signature: 'registerProvider(provider: TowerProvider): void',
         description: 'Register one backend under its TowerProvider.name. The registration is an owned effect: disposing the caller\'s fiber removes it.',
         parameters: [{ name: 'provider', description: 'the backend to publish.' }],
@@ -6161,12 +6233,52 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface TowerActivityEntry {\n    readonly time: string;\n    readonly kind: \'init\' | \'adopt\' | \'spawn\' | \'review\' | \'merge\' | \'abort\' | \'message\' | \'finding\' | \'teardown\';\n    readonly actor: string;\n    readonly mission?: TowerMissionId;\n    readonly detail: string;\n}',
   },
   {
+    name: 'TowerDashboard',
+    declaration: 'export interface TowerDashboard {\n    readonly base: string;\n    readonly missions: TowerMissionView[];\n    readonly findings: number;\n    readonly activity: TowerActivityEntry[];\n}',
+  },
+  {
+    name: 'TowerFinding',
+    declaration: 'export interface TowerFinding {\n    readonly id: TowerFindingId;\n    readonly title: string;\n    readonly body: string;\n    readonly author: string;\n    readonly time: string;\n}',
+  },
+  {
+    name: 'TowerFindingId',
+    declaration: 'export type TowerFindingId = Branded<\'TowerFindingId\'>;',
+  },
+  {
+    name: 'TowerFindingRequest',
+    declaration: 'export interface TowerFindingRequest {\n    readonly title: string;\n    readonly body: string;\n}',
+  },
+  {
     name: 'TowerLocalActivityNotice',
     declaration: 'export interface TowerLocalActivityNotice {\n    readonly root: string;\n    readonly entry: TowerActivityEntry;\n    readonly commit?: string;\n}',
   },
   {
+    name: 'TowerMergeResult',
+    declaration: 'export interface TowerMergeResult {\n    readonly mission: TowerMissionView;\n    readonly mergeCommit: string;\n}',
+  },
+  {
+    name: 'TowerMessage',
+    declaration: 'export interface TowerMessage {\n    readonly id: string;\n    readonly from: string;\n    readonly to: string;\n    readonly content: string;\n    readonly time: string;\n}',
+  },
+  {
+    name: 'TowerMessageRequest',
+    declaration: 'export interface TowerMessageRequest {\n    readonly to: string;\n    readonly content: string;\n    readonly signal: AbortSignal;\n}',
+  },
+  {
+    name: 'TowerMission',
+    declaration: 'export interface TowerMission {\n    readonly id: TowerMissionId;\n    readonly title: string;\n    readonly prompt: string;\n    readonly base: string;\n    readonly branch: string;\n    readonly worktree: string;\n    readonly status: TowerMissionStatus;\n    readonly owner?: SessionId;\n    readonly createdAt: string;\n    readonly updatedAt: string;\n}',
+  },
+  {
     name: 'TowerMissionId',
     declaration: 'export type TowerMissionId = Branded<\'TowerMissionId\'>;',
+  },
+  {
+    name: 'TowerMissionStatus',
+    declaration: 'export type TowerMissionStatus = \'spawning\' | \'active\' | \'interrupted\' | \'approved\' | \'merged\' | \'failed\' | \'aborted\';',
+  },
+  {
+    name: 'TowerMissionView',
+    declaration: 'export interface TowerMissionView extends TowerMission {\n    readonly ownerLive: boolean;\n    readonly latestReview?: TowerReviewRound;\n    readonly tipMatchesReview: boolean;\n}',
   },
   {
     name: 'TowerModeState',
@@ -6175,6 +6287,34 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'TowerProvider',
     declaration: 'export interface TowerProvider extends TowerOperations {\n    readonly name: string;\n    validateBase(cwd: string, base: string): Promise<void>;\n}',
+  },
+  {
+    name: 'TowerReviewRequest',
+    declaration: 'export interface TowerReviewRequest {\n    readonly mission: TowerMissionId;\n    readonly verdict: \'approve\' | \'reject\';\n    readonly summary: string;\n}',
+  },
+  {
+    name: 'TowerReviewRound',
+    declaration: 'export interface TowerReviewRound {\n    readonly round: number;\n    readonly verdict: \'approve\' | \'reject\';\n    readonly commit: string;\n    readonly summary: string;\n    readonly reviewer: string;\n    readonly time: string;\n}',
+  },
+  {
+    name: 'TowerSpawnRequest',
+    declaration: 'export interface TowerSpawnRequest {\n    readonly title: string;\n    readonly prompt: string;\n    readonly signal: AbortSignal;\n}',
+  },
+  {
+    name: 'TowerTeardownRequest',
+    declaration: 'export interface TowerTeardownRequest {\n    readonly force: boolean;\n    readonly signal: AbortSignal;\n}',
+  },
+  {
+    name: 'TowerTeardownResult',
+    declaration: 'export interface TowerTeardownResult {\n    readonly removed: TowerMissionId[];\n    readonly kept: readonly {\n        readonly id: TowerMissionId;\n        readonly reason: string;\n    }[];\n    readonly interrupted: number;\n}',
+  },
+  {
+    name: 'TowerWorkspace',
+    declaration: 'export interface TowerWorkspace {\n    readonly version: 1;\n    readonly base: string;\n    readonly root: string;\n    readonly createdAt: string;\n}',
+  },
+  {
+    name: 'TowerWorkspaceInfo',
+    declaration: 'export interface TowerWorkspaceInfo {\n    readonly workspace: TowerWorkspace;\n    readonly adopted: boolean;\n    readonly missions: number;\n}',
   },
   {
     name: 'TurnEndCancelCause',
