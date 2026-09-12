@@ -325,6 +325,9 @@ importers:
       '@deepseek-ai/dsh-tool-workflow':
         specifier: workspace:^
         version: link:../../packages/workflow/tool-workflow
+      '@deepseek-ai/dsh-tower-profile':
+        specifier: workspace:^
+        version: link:../../packages/bundle/tower
       '@deepseek-ai/dsh-web-app':
         specifier: workspace:^
         version: link:../../packages/bundle/web-app
@@ -470,9 +473,6 @@ importers:
       '@deepseek-ai/dsh-tools':
         specifier: workspace:^
         version: link:../../packages/core/tools
-      '@deepseek-ai/dsh-tower-profile':
-        specifier: workspace:^
-        version: link:../../packages/bundle/tower
       '@deepseek-ai/dsh-user-approval':
         specifier: workspace:^
         version: link:../../packages/interaction/user-approval
