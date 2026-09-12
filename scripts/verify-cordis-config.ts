@@ -10,7 +10,8 @@
  * Loader fixtures resolve from their package manifest.
  */
 
-import { globSync, readFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { existsSync, globSync, lstatSync, readFileSync } from 'node:fs'
 import { dirname, relative, resolve } from 'node:path'
 import { Script } from 'node:vm'
 import ts from 'typescript'
@@ -57,11 +58,22 @@ const CHOOSER_BACKEND_PACKAGES = [
 const errors: string[] = []
 const pluginReferences: PluginReference[] = []
 
+/** Git index mode for an entry recorded as a symbolic link. */
+const GIT_SYMLINK_MODE = '120000'
+/** Upper bound on degraded-symlink records one read follows before giving up. */
+const MAX_DEGRADED_SYMLINK_HOPS = 16
+
 if (import.meta.main) {
   const files = cordisConfigFiles(root)
+  const indexSymlinks = gitIndexSymlinks(root, files)
 
   for (const file of files) {
-    const document = loadCordisYaml(readFileSync(resolve(root, file), 'utf8'))
+    const read = readLoaderConfigText(root, file, indexSymlinks)
+    if ('problem' in read) {
+      errors.push(`${file}: ${read.problem}`)
+      continue
+    }
+    const document = loadCordisYaml(read.text)
     if (!isUnknownArray(document)) {
       errors.push(`${file}: root must be a Loader entry array`)
       continue
@@ -85,6 +97,82 @@ if (import.meta.main) {
   } else {
     console.log(`verify-cordis-config: ${files.length} config files passed.`)
   }
+}
+
+/**
+ * Paths among `files` that the git index records as symlinks (mode 120000).
+ *
+ * The index records the link kind even where the checkout materialized the
+ * path as a plain text file, so it is the authoritative signal that a
+ * regular-file read is really reading a recorded link target. A git that is
+ * unavailable or fails yields no records and every file is read literally.
+ * @param repoRoot - Repository root (the git work tree) to query.
+ * @param files - Repository-relative candidate paths, either separator.
+ * @returns Slash-normalized symlink paths.
+ */
+export function gitIndexSymlinks(repoRoot: string, files: readonly string[]): Set<string> {
+  if (files.length === 0) return new Set()
+  const result = spawnSync('git', ['-C', repoRoot, '--literal-pathspecs', 'ls-files', '-s', '--', ...files.map(toPosixPath)], {
+    encoding: 'utf8',
+    maxBuffer: 1 << 26,
+  })
+  if (result.error !== undefined || result.status !== 0) return new Set()
+  const symlinks = new Set<string>()
+  for (const line of result.stdout.split('\n')) {
+    const [metadata, path] = line.split('\t')
+    if (metadata === undefined || path === undefined) continue
+    if (metadata.split(' ')[0] !== GIT_SYMLINK_MODE) continue
+    symlinks.add(path)
+  }
+  return symlinks
+}
+
+/**
+ * Working-tree text of one Loader configuration file.
+ *
+ * A git symlink checked out with `core.symlinks=false` — the Windows default —
+ * materializes as a plain text file whose content is the recorded link
+ * target. Resolving that target reproduces the read every symlink-capable
+ * platform performs, so the gate validates the same bytes locally as CI does.
+ * A degraded record whose target cannot be resolved is reported instead of
+ * surfacing as a misleading parse failure. A real symlink is read through
+ * `readFileSync`, which follows it.
+ * @param repoRoot - Repository root the paths are relative to.
+ * @param file - Repository-relative configuration path, either separator.
+ * @param indexSymlinks - Slash-normalized git symlink records from `gitIndexSymlinks`.
+ * @returns The file text, or the checkout problem that replaces it.
+ */
+export function readLoaderConfigText(
+  repoRoot: string,
+  file: string,
+  indexSymlinks: ReadonlySet<string>,
+): { text: string } | { problem: string } {
+  let path = toPosixPath(file)
+  for (let hop = 0; hop <= MAX_DEGRADED_SYMLINK_HOPS; hop++) {
+    const absolute = resolve(repoRoot, path)
+    const stat = lstatSync(absolute, { throwIfNoEntry: false })
+    if (stat === undefined) return { problem: 'the file does not exist in the working tree' }
+    if (stat.isSymbolicLink()) return { text: readFileSync(absolute, 'utf8') }
+    if (!indexSymlinks.has(path)) return { text: readFileSync(absolute, 'utf8') }
+    // A degraded record stores the link target as file content; resolve it
+    // against the record's directory exactly as a symlink would resolve.
+    const target = readFileSync(absolute, 'utf8').trim()
+    const resolved = resolve(repoRoot, dirname(path), target)
+    if (!existsSync(resolved)) {
+      return {
+        problem: 'git records this path as a symlink but the checkout wrote a plain text file '
+          + `(core.symlinks is off), and the recorded target "${target}" does not exist — `
+          + 'enable symlink support (git config core.symlinks true) and re-checkout this file',
+      }
+    }
+    path = relative(repoRoot, resolved).replaceAll('\\', '/')
+  }
+  return { problem: `symlink target chain exceeds ${MAX_DEGRADED_SYMLINK_HOPS} hops` }
+}
+
+/** Slash-normalized repository-relative form of a path, either separator. */
+function toPosixPath(path: string): string {
+  return path.replaceAll('\\', '/')
 }
 
 /**

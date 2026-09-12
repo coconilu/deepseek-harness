@@ -6,14 +6,16 @@
 
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   bundleManifestPaths,
   bundlePluginDependencyErrors,
+  gitIndexSymlinks,
   metadataExpressionErrors,
   packageTestFixtureDependencyErrors,
   packageTestPluginDependencyErrors,
+  readLoaderConfigText,
 } from './verify-cordis-config.ts'
 
 describe('verify-cordis-config metadata expressions', () => {
@@ -153,3 +155,86 @@ describe('package-owned Loader test dependency closures', () => {
     }
   })
 })
+
+describe('Loader config reads on degraded symlink checkouts', () => {
+  it('reads an ordinary file literally even when its content looks like a link target', () => {
+    const fixture = symlinkFixture()
+    try {
+      const read = readLoaderConfigText(fixture, 'profiles/acp.cordis.yml', new Set())
+      expect(read).toEqual({ text: '../snapshots/acp.cordis.yml' })
+    } finally {
+      rmSync(fixture, { recursive: true, force: true })
+    }
+  })
+
+  it('follows a degraded git symlink to its recorded target', () => {
+    const fixture = symlinkFixture()
+    try {
+      const read = readLoaderConfigText(
+        fixture,
+        'profiles\\acp.cordis.yml',
+        new Set(['profiles/acp.cordis.yml']),
+      )
+      expect(read).toEqual({ text: '- name: target\n' })
+    } finally {
+      rmSync(fixture, { recursive: true, force: true })
+    }
+  })
+
+  it('follows a chain of degraded records through intermediate links', () => {
+    const fixture = symlinkFixture()
+    writeFileSync(join(fixture, 'profiles/acp.cordis.yml'), './middle.cordis.yml')
+    writeFileSync(join(fixture, 'profiles/middle.cordis.yml'), '../snapshots/acp.cordis.yml')
+    try {
+      const read = readLoaderConfigText(fixture, 'profiles/acp.cordis.yml', new Set([
+        'profiles/acp.cordis.yml',
+        'profiles/middle.cordis.yml',
+      ]))
+      expect(read).toEqual({ text: '- name: target\n' })
+    } finally {
+      rmSync(fixture, { recursive: true, force: true })
+    }
+  })
+
+  it('fails loud when a degraded record cannot be resolved', () => {
+    const fixture = symlinkFixture()
+    writeFileSync(join(fixture, 'profiles/acp.cordis.yml'), '../../snapshots/missing.cordis.yml')
+    try {
+      const read = readLoaderConfigText(fixture, 'profiles/acp.cordis.yml', new Set(['profiles/acp.cordis.yml']))
+      expect('problem' in read && read.problem.includes('core.symlinks')).toBe(true)
+      expect('problem' in read && read.problem.includes('../../snapshots/missing.cordis.yml')).toBe(true)
+    } finally {
+      rmSync(fixture, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('git index symlink discovery', () => {
+  it('reports the symlink fixtures this repository records in its index', () => {
+    expect(gitIndexSymlinks(resolve(import.meta.dirname, '..'), [
+      'apps/cli/tests/profiles/acp/cordis.yml',
+      'apps/cli/tests/profiles/acp/tests/acp.e2e.ts',
+    ])).toEqual(new Set(['apps/cli/tests/profiles/acp/cordis.yml']))
+  })
+
+  it('reports nothing when git cannot describe the tree', () => {
+    const fixture = mkdtempSync(join(tmpdir(), 'dsh-git-index-symlinks-'))
+    try {
+      expect(gitIndexSymlinks(fixture, ['cordis.yml'])).toEqual(new Set())
+    } finally {
+      rmSync(fixture, { recursive: true, force: true })
+    }
+  })
+})
+
+/** Working tree with a snapshots target and a plain-text degraded link record. */
+function symlinkFixture(): string {
+  const fixture = mkdtempSync(join(tmpdir(), 'dsh-cordis-config-read-'))
+  const target = join(fixture, 'snapshots/acp.cordis.yml')
+  mkdirSync(dirname(target), { recursive: true })
+  writeFileSync(target, '- name: target\n')
+  const link = join(fixture, 'profiles/acp.cordis.yml')
+  mkdirSync(dirname(link), { recursive: true })
+  writeFileSync(link, '../snapshots/acp.cordis.yml')
+  return fixture
+}
