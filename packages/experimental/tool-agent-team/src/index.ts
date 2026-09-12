@@ -5,8 +5,7 @@ import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { TeamTaskId } from '@deepseek-ai/dsh-experimental-agent-team'
 import type { TeamMemberView } from '@deepseek-ai/dsh-experimental-agent-team'
-import { defineTool } from '@deepseek-ai/dsh-tools'
-import type { InferValue, ValueSchemaSpec } from '@deepseek-ai/dsh-tools'
+import { defineTool, jsonOutput } from '@deepseek-ai/dsh-tools'
 
 /** Cordis plugin name. */
 export const name = 'tool-agent-team'
@@ -130,23 +129,6 @@ const TASK_LIST_VALUE_SCHEMA = {
     nextCursor: { type: 'integer' },
   },
 } as const
-
-/**
- * Declare one canonical output schema with compact model-facing JSON. Every
- * Team result is a fixed record, so the declared schema is what makes the
- * compiler check `execute` against the value the model is promised.
- * @param schema - canonical value schema for one tool.
- * @returns the `output` declaration accepted by {@link defineTool}.
- */
-function jsonOutput<const S extends ValueSchemaSpec>(schema: S): {
-  schema: S
-  render: (args: unknown, value: InferValue<S>) => [{ type: 'text'; text: string }]
-} {
-  return {
-    schema,
-    render: (_args: unknown, value: InferValue<S>) => [{ type: 'text', text: JSON.stringify(value) }],
-  }
-}
 
 /** Recover the exact caller guaranteed by Agent-scoped tool discovery. */
 function callingAgent(agent: Agent | undefined, toolName: string): Agent {
