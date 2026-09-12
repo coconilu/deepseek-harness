@@ -47,6 +47,10 @@ Root and configured-index responses call `ctx.connection.authorizeIndex` before 
 
 Traversal returns 403 rather than an error page. An absent or non-file target inside the dist root returns an empty 404, so a stale link or a mistyped pathname is an explicit failure rather than a silent SPA fallback. Claiming the seat twice throws, and while the seat is unclaimed the webserver answers 404 — which is what a browser sees if this plugin's fiber is disposed.
 
+### Client build record check
+
+At activation the plugin verifies the dist against the nearest client build record (`.dsh-build/client-build-environment.json`, found by walking up from the dist root) and logs an actionable `console.error` when the record no longer describes the served files. A partial rebuild such as `pnpm --filter @deepseek-ai/dsh-web-frontend build` rewrites the dist without refreshing the record, and without this check the browser keeps running code from an unknown build with no error anywhere. A dist outside any build tree finds no record and stays silent, and the check never blocks serving; the remedy it names is `pnpm run build` for the complete build that refreshes the record, or `pnpm run dev:web` for the watch loop.
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -57,7 +61,7 @@ Traversal returns 403 rather than an error page. An absent or non-file target in
 
 ### Design concept
 
-The package is one function plugin around `serveStatic`: `apply` resolves the dist root from `distIndex`, builds a `renderIndex` closure that runs `ctx.webServer.renderIndex` over the raw `index.html`, and registers the fallback handler under an effect scope. The seat is single-owner by the webserver's contract — a second registration throws — and effect-scoped, so disposing the fiber releases the seat.
+The package is one function plugin around `serveStatic`: `apply` resolves the dist root from `distIndex`, verifies the dist against the nearest client build record, builds a `renderIndex` closure that runs `ctx.webServer.renderIndex` over the raw `index.html`, and registers the fallback handler under an effect scope. The seat is single-owner by the webserver's contract — a second registration throws — and effect-scoped, so disposing the fiber releases the seat.
 
 ### The traversal fence
 
@@ -68,6 +72,7 @@ The package is one function plugin around `serveStatic`: `apply` resolves the di
 | File | Role |
 |---|---|
 | [`src/index.ts`](src/index.ts) | `serveStatic` and `apply`: fallback claim, traversal rejection, index rendering, MIME table |
+| [`src/client-build-record.ts`](src/client-build-record.ts) | client build record schema, artifact digests, and the served-dist verification |
 
 </details>
 
@@ -103,6 +108,7 @@ These limits define when a served asset class is not yet covered. They are curre
 
 - **The starter MIME table is minimal** — it covers the Vite-emitted asset set plus the shipped PWA manifest; other extensions fall back to `application/octet-stream` until an asset class ships.
 - **Pathname routing is explicit** — the current client enters through the root or configured index path and has no History API pathname routes. Adding one requires an explicit server rule and real-composition coverage rather than a broad fallback for every miss.
+- **The record check covers the served dist only** — a loader-delivered `lib/client.js` rebuilt without the dist still matches the record's `dist` digest; release tooling and a complete `pnpm run build` verify the full artifact record.
 
 <a id="dev-note"></a>
 ### Dev Note

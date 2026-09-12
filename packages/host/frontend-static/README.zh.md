@@ -47,6 +47,10 @@ kind: "package-reference"
 
 遍历返回 403 而不是错误页。dist 根目录内不存在或不是文件的目标返回空 404，因此失效链接或拼错的 pathname 是显式失败，而不是静默的 SPA 回退。第二次占据席位会抛错，而席位无人占据时 webserver 返回 404——本插件的 fiber 被 dispose（资源释放）后，浏览器看到的就是该响应。
 
+### 客户端构建记录检查
+
+激活时，本插件用最近的客户端构建记录（`.dsh-build/client-build-environment.json`，从 dist 根目录向上查找）校验 dist，当记录不再描述所服务的文件时输出可操作的 `console.error`。像 `pnpm --filter @deepseek-ai/dsh-web-frontend build` 这样的部分重建会改写 dist 却不刷新记录，没有该检查时浏览器会继续运行未知构建的代码且无任何报错。任何构建树之外的 dist 找不到记录并保持静默，检查也绝不阻塞服务；它给出的补救是刷新记录的完整构建 `pnpm run build`，或监视循环 `pnpm run dev:web`。
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -57,7 +61,7 @@ kind: "package-reference"
 
 ### 设计理念
 
-本包是围绕 `serveStatic` 的一个函数插件：`apply` 从 `distIndex` 解析出 dist 根目录，构建一个对原始 `index.html` 运行 `ctx.webServer.renderIndex` 的 `renderIndex` 闭包，并在 effect 作用域下注册回退 handler。按 webserver 的约定，席位只有单一所有者——第二次注册会抛错——且受 effect 作用域约束，因此 dispose fiber 即释放席位。
+本包是围绕 `serveStatic` 的一个函数插件：`apply` 从 `distIndex` 解析出 dist 根目录，用最近的客户端构建记录校验 dist，构建一个对原始 `index.html` 运行 `ctx.webServer.renderIndex` 的 `renderIndex` 闭包，并在 effect 作用域下注册回退 handler。按 webserver 的约定，席位只有单一所有者——第二次注册会抛错——且受 effect 作用域约束，因此 dispose fiber 即释放席位。
 
 ### 遍历栅栏
 
@@ -68,6 +72,7 @@ kind: "package-reference"
 | 文件 | 职责 |
 |---|---|
 | [`src/index.ts`](src/index.ts) | `serveStatic` 与 `apply`：回退占据、遍历拒绝、index 渲染、MIME 表 |
+| [`src/client-build-record.ts`](src/client-build-record.ts) | 客户端构建记录 schema、产物 digest 与所服务 dist 的校验 |
 
 </details>
 
@@ -103,6 +108,7 @@ kind: "package-reference"
 
 - **初始 MIME 表很精简**：它覆盖 Vite 输出的资产集合及实际交付的 PWA manifest；其他扩展名在相应资产类别发布前都会回退到 `application/octet-stream`。
 - **Pathname 路由是显式声明**——当前客户端从根目录或配置的 index 路径进入，没有 History API pathname 路由。新增一条需要显式服务器规则与真实组合覆盖，而不是对每次未命中做宽泛回退。
+- **构建记录检查只覆盖所服务的 dist**——只重建 loader 交付的 `lib/client.js` 而不改写 dist 时，记录的 `dist` digest 仍然匹配；发布工具与完整 `pnpm run build` 会校验完整产物记录。
 
 <a id="dev-note"></a>
 ### 开发备注
