@@ -16,7 +16,7 @@ headless 快照 harness 按会话角色归一化。会话日志比较（`normali
 
 ### tower-mission-worktree 场景
 
-该场景（`snapshots/session/tower-mission-worktree/`）端到端证明真实拓扑：场景本地的确定性 tower provider 真实执行 `git worktree add .tower/worktrees/m-1 -b tower/m-1 main` fork 出 worktree，并以 worktree 作为持久会话 cwd 启动 mission 子会话——正是 [tower-merge-flow](2026-08-24-session-log-snapshot-corpus.zh.md) 的 fixture provider 文档记载要绕开的那个拓扑。它的 git workspace setup 变体提交空根提交，使种子工作区不含受配对门约束的 README 文件；固定的日期与身份仍能复现稳定哈希。
+该场景（`snapshots/session/tower-mission-worktree/`）端到端证明真实拓扑：场景本地的确定性 tower provider 真实执行 `git worktree add .tower/worktrees/m-1 -b tower/m-1 main` fork 出 worktree，并以 worktree 作为持久会话 cwd 启动 mission 子会话——正是 [已录会话快照语料](2026-08-24-session-log-snapshot-corpus.zh.md) 这层设计迫使早先 tower-merge-flow 场景的 fixture provider 记载要绕开的那个拓扑。它的 git workspace setup 变体提交空根提交，使种子工作区不含受配对门约束的 README 文件；固定的日期与身份仍能复现稳定哈希。
 
 场景声明 `platform: posix`，原因与 merge-flow 场景已记录的相同：tower 工具结果内嵌 JSON 字符串化的工作区路径，Windows 反斜杠转义会在这一字符串层级击穿 cwd token 化。必选的 macOS/Linux lane 重放它；Windows 跳过运行测试，而 fixture 保护在所有平台继续覆盖已提交字节。
 

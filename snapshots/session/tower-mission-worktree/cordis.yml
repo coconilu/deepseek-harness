@@ -6,8 +6,11 @@
 # deterministic provider fixture (worktree-fixture provider: real git worktree
 # provisioning, mission child Session started inside the worktree, pinned
 # record timestamps). The shell tools stay disabled so the committed tool
-# schemas are platform-stable. Bash tool results and the child's write reuse
-# relative paths, so the fixture replays on macOS, Linux, and Windows alike.
+# schemas are platform-stable. The scenario declares platform: posix because
+# the tower tool results JSON-stringify workspace paths, whose Windows
+# backslash escaping the shared normalizer cannot tokenize; on the required
+# macOS/Linux lane the child's write and the lead's tower calls keep their
+# recorded token forms.
 
 - id: tool-pwsh
   disabled: true
